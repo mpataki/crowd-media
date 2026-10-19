@@ -1,0 +1,41 @@
+version: "3"
+
+# Local deploy is the chosen path (the GitHub Actions deploy job stays off unless
+# CF_CI_DEPLOY is set). Config comes from the 1Password Environment `crowd-media-deploy`,
+# mounted by the 1Password app at ./.env (gitignored; a pipe the app serves, not a file
+# with values on disk). CLOUDFLARE_API_TOKEN there is an `op://` reference, not a value;
+# `op run --env-file=.env` resolves it for the deploy, so the token exists only inside
+# that process. If `.env` is missing, open 1Password → Developer → Environments →
+# crowd-media-deploy → mount it here.
+
+dotenv: [".env"]
+
+vars:
+  WORKER_URL: https://crowd-media.matpataki.workers.dev
+
+tasks:
+  dev:
+    desc: Run the Worker + assets locally with wrangler (no Cloudflare login needed)
+    cmds:
+      - npx wrangler dev
+
+  types:
+    desc: Regenerate worker-configuration.d.ts from wrangler.jsonc (commit the result)
+    cmds:
+      - npx wrangler types
+
+  check:
+    desc: Typecheck (tsc --noEmit)
+    cmds:
+      - npx tsc --noEmit
+
+  test:
+    desc: Run the vitest suite inside the Workers runtime
+    cmds:
+      - npx vitest run
+
+  deploy:
+    desc: Deploy the Worker, then smoke-check the deployed health route
+    cmds:
+      - op run --env-file=.env -- npx wrangler deploy
+      - scripts/smoke-deployed.sh {{.WORKER_URL}}/api/health
