@@ -1,0 +1,4 @@
+# Copy to .dev.vars (gitignored) for `task dev`. Any random string works locally:
+#   openssl rand -base64 32
+# Production: `npx wrangler secret put UPLOAD_SIGNING_KEY`.
+UPLOAD_SIGNING_KEY=dev-only-change-me
