@@ -10,16 +10,24 @@ export default {
     if (request.method === "GET" && url.pathname === "/api/health") {
       return Response.json({ ok: true });
     }
-    // /api/* reaches us via run_worker_first; /<band>/api/* only because no asset
-    // matches it (assets has no not_found_handling). Setting an SPA/404 fallback would
-    // swallow those paths: add "/*/api/*" to run_worker_first first. Non-API paths are
-    // static and not the Worker's to gate.
-    if (!url.pathname.includes("/api/")) return env.ASSETS.fetch(request);
 
     const resolved = resolveBand(url.hostname, url.pathname);
+    const path = resolved?.strippedPathname;
+
+    if (!url.pathname.includes("/api/")) {
+      // /<band> or /<band>/ on an unclaimed host is that band's page: the root asset.
+      if (resolved?.via === "path" && path === "/") {
+        return env.ASSETS.fetch(new Request(new URL("/", url), request));
+      }
+      // No default band: an unclaimed host's root is not a page.
+      if (!resolved && url.pathname === "/") return notFound();
+      // Everything else is static (absolute asset URLs), served as-is on any host.
+      return env.ASSETS.fetch(request);
+    }
+
     // No band, or a band segment where none is accepted (branded host, nested path).
-    if (!resolved || !resolved.strippedPathname.startsWith("/api/")) return notFound();
-    const { band, strippedPathname: path } = resolved;
+    if (!resolved || !path?.startsWith("/api/")) return notFound();
+    const { band } = resolved;
 
     if (request.method === "GET" && path === "/api/band") {
       return Response.json(bandInfo(band, Date.now()));
