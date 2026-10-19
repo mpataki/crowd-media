@@ -5,7 +5,8 @@
 import { config } from "./index";
 import type { Band } from "./schema";
 
-export type Resolved = { band: Band; strippedPathname: string };
+/** `via: "path"` means the first segment named the band and has been stripped. */
+export type Resolved = { band: Band; strippedPathname: string; via: "host" | "path" };
 
 export function resolveBand(
   hostname: string,
@@ -14,10 +15,10 @@ export function resolveBand(
 ): Resolved | null {
   const host = hostname.toLowerCase().replace(/:\d+$/, "");
   const owner = bands.find((b) => b.hosts.includes(host));
-  if (owner) return { band: owner, strippedPathname: pathname };
+  if (owner) return { band: owner, strippedPathname: pathname, via: "host" };
 
   const m = /^\/([^/]+)(\/.*)?$/.exec(pathname);
   const band = m && bands.find((b) => b.slug === m[1]);
   if (!band) return null;
-  return { band, strippedPathname: m[2] ?? "/" };
+  return { band, strippedPathname: m[2] ?? "/", via: "path" };
 }

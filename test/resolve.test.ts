@@ -6,6 +6,7 @@ describe("resolveBand", () => {
     expect(resolveBand("share.foolhearts.com", "/api/band")).toMatchObject({
       band: { slug: "foolhearts" },
       strippedPathname: "/api/band",
+      via: "host",
     });
     expect(resolveBand("SHARE.foolhearts.com", "/")?.band.slug).toBe("foolhearts");
   });
@@ -15,9 +16,11 @@ describe("resolveBand", () => {
       expect(resolveBand(host, "/shivs/api/band")).toMatchObject({
         band: { slug: "shivs" },
         strippedPathname: "/api/band",
+        via: "path",
       });
     }
     expect(resolveBand("localhost", "/foolhearts")?.strippedPathname).toBe("/");
+    expect(resolveBand("localhost", "/foolhearts/")?.strippedPathname).toBe("/");
   });
 
   it("branded host does not accept a band segment", () => {
