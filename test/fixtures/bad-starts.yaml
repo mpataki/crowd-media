@@ -1,0 +1,15 @@
+# Invalid on purpose: `starts` has no offset. Used by test/config.test.ts.
+turnstile: { sitekey: "" }
+bands:
+  testband:
+    name: Test Band
+    hosts: []
+    theme: { accent: "#000000", logo: /brand/x.svg, blurb: Hi }
+    caps: { file_mb: 1, day_gb: 1, month_gb: 1 }
+    shows:
+      - id: good-night
+        venue: Somewhere
+        starts: 2026-10-10T21:00-04:00
+      - id: bad-night
+        venue: Elsewhere
+        starts: 2026-10-11 21:00

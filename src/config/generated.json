@@ -1,0 +1,53 @@
+{
+  "turnstile": {
+    "sitekey": ""
+  },
+  "bands": [
+    {
+      "slug": "foolhearts",
+      "name": "Fool Hearts",
+      "hosts": [
+        "share.foolhearts.com"
+      ],
+      "theme": {
+        "accent": "#c8102e",
+        "logo": "/brand/foolhearts.svg",
+        "blurb": "Shot something tonight? Send it our way."
+      },
+      "caps": {
+        "fileMb": 2048,
+        "dayGb": 20,
+        "monthGb": 100
+      },
+      "paused": false,
+      "shows": [
+        {
+          "id": "2026-10-10-the-dakota",
+          "venue": "The Dakota Tavern",
+          "starts": "2026-10-10T21:00-04:00",
+          "ends": "2026-10-11T02:00-04:00",
+          "theme": {
+            "blurb": "Marianne & Mark's wedding — thanks for coming!"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "shivs",
+      "name": "The Shivs",
+      "hosts": [],
+      "theme": {
+        "accent": "#1f6feb",
+        "logo": "/brand/shivs.svg",
+        "blurb": "Send us what you shot!"
+      },
+      "caps": {
+        "fileMb": 2048,
+        "dayGb": 20,
+        "monthGb": 100
+      },
+      "paused": false,
+      "shows": []
+    }
+  ]
+}

@@ -24,18 +24,26 @@ tasks:
     cmds:
       - npx wrangler types
 
+  config:
+    desc: Validate bands.yaml and compile it to src/config/generated.json (commit both)
+    cmds:
+      - node scripts/build-config.ts bands.yaml src/config/generated.json
+
   check:
     desc: Typecheck (tsc --noEmit)
+    deps: [config]
     cmds:
       - npx tsc --noEmit
 
   test:
     desc: Run the vitest suite inside the Workers runtime
+    deps: [config]
     cmds:
       - npx vitest run
 
   deploy:
     desc: Deploy the Worker, then smoke-check the deployed health route
+    deps: [config]
     cmds:
       - op run --env-file=.env -- npx wrangler deploy
       - scripts/smoke-deployed.sh {{.WORKER_URL}}/api/health

@@ -1,0 +1,39 @@
+# Bands, hosts, caps and shows. Compiled by `task config` into src/config/generated.json
+# (commit both). Times need an explicit offset: Toronto is -04:00 in summer, -05:00 in
+# winter. A show's `ends` defaults to starts + 5 h; `theme` on a show overrides the
+# band's theme field by field for that night.
+
+# Turnstile sitekey (public). Empty until the widget exists in Cloudflare.
+turnstile:
+  sitekey: ""
+
+bands:
+  foolhearts:
+    name: Fool Hearts
+    # First host is the canonical URL (QR target). The workers.dev host is deliberately
+    # unclaimed: there every band is reached by path (/foolhearts/, /shivs/).
+    hosts: [share.foolhearts.com]
+    theme:
+      accent: "#c8102e"
+      logo: /brand/foolhearts.svg
+      blurb: Shot something tonight? Send it our way.
+    caps: { file_mb: 2048, day_gb: 20, month_gb: 100 }
+    paused: false
+    shows:
+      - id: 2026-10-10-the-dakota
+        venue: The Dakota Tavern
+        starts: 2026-10-10T21:00-04:00
+        ends: 2026-10-11T02:00-04:00
+        theme:
+          blurb: Marianne & Mark's wedding — thanks for coming!
+
+  shivs:
+    name: The Shivs
+    hosts: [] # no domain yet: crowd-media.matpataki.workers.dev/shivs/
+    theme:
+      accent: "#1f6feb"
+      logo: /brand/shivs.svg
+      blurb: Send us what you shot!
+    caps: { file_mb: 2048, day_gb: 20, month_gb: 100 }
+    paused: false
+    shows: []
