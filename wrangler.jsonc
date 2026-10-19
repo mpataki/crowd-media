@@ -3,12 +3,13 @@
   "name": "crowd-media",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-19",
-  // Page is asset-served; only /api/* reaches the Worker. Everything else the Worker
-  // receives (none, by construction) falls through to ASSETS.
+  // The Worker routes every request (band resolution, /<band>/ page on unclaimed hosts)
+  // and hands static paths to ASSETS itself, so routing never depends on whether an
+  // asset happens to match.
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": true
   },
   "observability": { "enabled": true },
   "upload_source_maps": true
