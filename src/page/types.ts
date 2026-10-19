@@ -10,7 +10,8 @@ export interface Show {
 
 export interface BandInfo {
   band: { slug: string; name: string };
-  canonicalUrl: string;
+  /** null when the band has no hosts entry (served only under a prefix). */
+  canonicalUrl: string | null;
   theme: { accent: string; logo: string; blurb: string };
   caps: { fileMb: number; dayGb: number; monthGb: number };
   paused: boolean;
