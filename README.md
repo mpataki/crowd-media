@@ -20,6 +20,12 @@ task check   # tsc --noEmit
 task test    # vitest, running inside the Workers runtime
 ```
 
+## Adding a show / a band
+
+1. Edit `bands.yaml` (a show: `id`, `venue`, `starts` with offset like `2026-10-10T21:00-04:00`).
+2. `task check` — validates, regenerates `src/config/generated.json`; commit both.
+3. `task deploy`.
+
 ## Deploy
 
 Hosting is the Cloudflare Worker `crowd-media` at
