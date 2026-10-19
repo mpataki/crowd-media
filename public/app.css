@@ -1,0 +1,52 @@
+/* Layer 1 (undesigned): system fonts, spacing, legibility, one accent colour. */
+:root {
+  --accent: #0b5cad; /* 6.5:1 on white; overridden by the band's theme.accent */
+  --on-accent: #fff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  color: #111;
+  background: #fff;
+}
+body { margin: 0; }
+main { max-width: 32rem; margin: 0 auto; padding: 1rem; }
+h1 { margin: 0.5rem 0; font-size: 1.6rem; }
+#logo { max-width: 10rem; max-height: 6rem; }
+
+button, input, .pick { font: inherit; }
+button, .pick {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--accent);
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #111;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  box-sizing: border-box;
+}
+.pick, button[type="submit"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.pick { font-size: 1.2rem; padding: 1.25rem 1rem; }
+button:disabled { opacity: 0.6; cursor: default; }
+#show-change { display: inline; width: auto; min-height: 0; margin: 0; padding: 0.25rem 0.5rem; }
+
+/* File input stays focusable inside its label; the label shows the focus ring. */
+.pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.pick:focus-within, :focus-visible { outline: 3px solid #111; outline-offset: 2px; }
+
+label[for="credit"] { display: block; margin-top: 1rem; }
+#credit { display: block; width: 100%; box-sizing: border-box; padding: 0.75rem; border: 1px solid #555; border-radius: 0.5rem; }
+#consent { font-size: 0.9rem; color: #333; }
+
+fieldset { margin: 0.75rem 0; border: 1px solid #555; border-radius: 0.5rem; }
+fieldset label { display: block; padding: 0.5rem 0; }
+
+#queue { list-style: none; padding: 0; }
+#queue li { padding: 0.75rem 0; border-bottom: 1px solid #ddd; }
+#queue .name { display: block; overflow-wrap: anywhere; }
+#queue progress { width: 100%; height: 0.75rem; accent-color: var(--accent); }
+#queue .reason { margin: 0.25rem 0 0; color: #a00; }
+[hidden] { display: none !important; }

@@ -3,9 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>crowd-media</title>
+<title>Send your photos &amp; videos</title>
+<link rel="stylesheet" href="/app.css">
+<script type="module" src="/app.js"></script>
 </head>
 <body>
-<h1>crowd-media</h1>
+<main>
+  <header>
+    <img id="logo" alt="" hidden>
+    <h1 id="band-name">Loading…</h1>
+    <p id="blurb"></p>
+  </header>
+
+  <p id="status" role="status"></p>
+
+  <section id="show" aria-label="Show">
+    <p id="show-text"></p>
+    <button type="button" id="show-change" aria-controls="show-picker" aria-expanded="false" hidden>Not this one?</button>
+    <fieldset id="show-picker" hidden>
+      <legend>Which show were you at?</legend>
+    </fieldset>
+  </section>
+
+  <form id="form" hidden>
+    <label class="pick">Choose photos &amp; videos
+      <input id="files" type="file" multiple accept="image/*,video/*">
+    </label>
+
+    <label for="credit">Credit (optional)</label>
+    <input id="credit" type="text" placeholder="Name or @handle for credit (optional)" autocomplete="nickname" maxlength="80">
+
+    <p id="consent"></p>
+
+    <button type="submit" id="upload" disabled>Upload</button>
+  </form>
+
+  <div id="turnstile"></div>
+
+  <ul id="queue" aria-live="polite" aria-label="Uploads"></ul>
+
+  <p id="summary" role="status"></p>
+  <button type="button" id="more" hidden>Upload more</button>
+</main>
 </body>
 </html>

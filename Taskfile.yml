@@ -16,6 +16,7 @@ vars:
 tasks:
   dev:
     desc: Run the Worker + assets locally with wrangler (no Cloudflare login needed)
+    deps: [build-page]
     cmds:
       - npx wrangler dev
 
@@ -30,14 +31,15 @@ tasks:
       - node scripts/build-config.ts bands.yaml src/config/generated.json
 
   check:
-    desc: Typecheck (tsc --noEmit)
-    deps: [config]
+    desc: Typecheck (tsc --noEmit; the page has its own browser tsconfig)
+    deps: [config, build-page]
     cmds:
       - npx tsc --noEmit
+      - npx tsc --noEmit -p src/page
 
   test:
     desc: Run the vitest suite inside the Workers runtime
-    deps: [config]
+    deps: [config, build-page]
     cmds:
       - npx vitest run
 
@@ -47,3 +49,9 @@ tasks:
     cmds:
       - op run --env-file=.env -- npx wrangler deploy
       - scripts/smoke-deployed.sh {{.WORKER_URL}}/api/health
+
+  build-page:
+    desc: Bundle src/page/main.ts → public/app.js (committed; rebuild after page edits)
+    cmds:
+      - node scripts/build-page.mjs
+

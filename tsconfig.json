@@ -11,5 +11,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  // Browser-only page code; typechecked by src/page/tsconfig.json (DOM lib).
+  "exclude": ["src/page/main.ts", "src/page/dom"]
 }

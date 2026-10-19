@@ -1,0 +1,17 @@
+{
+  // The page runs in a browser: DOM lib, no Workers types. The repo-root tsconfig
+  // excludes the DOM-only files (main.ts, dom/) and typechecks the pure modules, which
+  // the Workers-runtime tests import.
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["."]
+}

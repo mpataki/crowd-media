@@ -25,6 +25,8 @@ it routes `/api/*` itself and hands static paths to `ASSETS`.
   any unclaimed host → first path segment, stripped: `/shivs/api/band`), `pickShow`,
   `torontoDate` (06:00 rollover), `objectPrefix`, `themeFor`.
 - `public/` — everything that ships as static assets. Nothing outside it is served.
+- `src/page/` — upload page TypeScript, bundled by `task build-page` (`scripts/build-page.mjs`,
+  wrangler's esbuild) into `public/app.js`, which is committed so a clean-checkout deploy works.
 - `test/` — vitest suites, run inside the Workers runtime by `@cloudflare/vitest-plugin`
   (`vitest.config.ts` points it at `wrangler.jsonc`).
 - `wrangler.jsonc` — Worker `crowd-media`: `main`, `assets` (`ASSETS` binding,
