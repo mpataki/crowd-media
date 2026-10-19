@@ -1,0 +1,63 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# One run per ref. PR runs supersede each other; main deploys queue in push order
+# and are never cancelled mid-upload.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Proves the Worker bundles and the assets directory resolves. Needs no secrets, so
+  # it also runs for fork PRs.
+  dry-run:
+    name: wrangler deploy --dry-run
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx wrangler deploy --dry-run
+        env:
+          CI: "true"
+
+  # Inert until the repo variable CF_CI_DEPLOY is set to "true" (Settings → Variables).
+  # Before that, pushes to main skip this job rather than fail on absent secrets;
+  # once it's on, a missing CLOUDFLARE_* secret is a real error and wrangler says so.
+  deploy:
+    name: wrangler deploy
+    if: github.event_name == 'push' && vars.CF_CI_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://crowd-media.matpataki.workers.dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx wrangler deploy
+        env:
+          CI: "true"
+          # Narrow deploy-only token (Workers Scripts: Edit), never the account-wide one.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: smoke check deployed health route
+        run: scripts/smoke-deployed.sh https://crowd-media.matpataki.workers.dev/api/health
