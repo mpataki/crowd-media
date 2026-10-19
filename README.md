@@ -10,6 +10,7 @@ Requires Node 22. No Cloudflare login needed:
 
 ```bash
 npm ci
+cp .dev.vars.example .dev.vars   # upload signing key for local dev (gitignored)
 task dev   # http://localhost:8787 — GET /api/health → {"ok":true}
 ```
 
@@ -50,6 +51,10 @@ tokens) is Terraform in `mp-infra`; `wrangler.jsonc` only names bindings.
   `crowd-media-deploy`, which the 1Password app mounts at `./.env` (gitignored, never a
   file with values). If `.env` is missing, mount it from 1Password → Developer →
   Environments.
+- **Upload signing key (once per account):** uploads answer 500 "Uploads aren't set up
+  yet." until the Worker has `UPLOAD_SIGNING_KEY`:
+  `openssl rand -base64 32 | op run --env-file=.env -- npx wrangler secret put UPLOAD_SIGNING_KEY`.
+  Rotating it invalidates in-flight uploads only (guests restart them).
 - **CI:** `.github/workflows/deploy.yml`. Pull requests always run
   `wrangler deploy --dry-run`. The push-to-`main` deploy job is **off until** the repo
   variable `CF_CI_DEPLOY` is `true`; turning it on also requires the secrets

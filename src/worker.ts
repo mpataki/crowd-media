@@ -1,4 +1,5 @@
 import { bandInfo } from "./api/band";
+import { uploads } from "./api/uploads";
 import { resolveBand } from "./config/resolve";
 
 const notFound = () => new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain" } });
@@ -32,6 +33,7 @@ export default {
     if (request.method === "GET" && path === "/api/band") {
       return Response.json(bandInfo(band, Date.now()));
     }
+    if (path === "/api/uploads" || path.startsWith("/api/uploads/")) return uploads(request, env, band, path);
     return Response.json({ error: "not_found" }, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
