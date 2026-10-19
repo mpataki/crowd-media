@@ -55,3 +55,8 @@ tasks:
     cmds:
       - node scripts/build-page.mjs
 
+  page:mock:
+    desc: Serve the page against an in-memory mock API on http://127.0.0.1:8788 (dev only)
+    deps: [build-page]
+    cmds:
+      - node scripts/mock-api.mjs --port 8788

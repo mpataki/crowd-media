@@ -26,6 +26,19 @@ task test    # vitest, running inside the Workers runtime
 2. `task check` — validates, regenerates `src/config/generated.json`; commit both.
 3. `task deploy`.
 
+## Upload page against a mock API
+
+`task page:mock` serves `public/` plus an in-memory `/api/band` and `/api/uploads*` at
+http://127.0.0.1:8788/ (band-prefix form: `/shivs/`). Scenarios ride on the page URL:
+`?fail=part2` (part 2 fails once), `?status=429` (second file's init refused),
+`?show=none`, `?paused=1`. `/__mock/log` lists every init body and part event.
+
+Two-file check: select a 1 MB jpg and a 70 MB mp4, tap Upload → both bars reach 100 %,
+"Thanks! 2 files sent to Mock Band." With `?fail=part2` the same, and the log shows
+`part-fail:2` then `part:2`. With `?status=429` the jpg completes and the mp4 shows the
+server's reason plus "Failed — tap to retry"; tapping it completes. "Not this one?" →
+pick another show → that `showId` appears in the log's init bodies.
+
 ## Deploy
 
 Hosting is the Cloudflare Worker `crowd-media` at
