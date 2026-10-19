@@ -19,12 +19,20 @@ if (doc.errors.length > 0) {
   process.exit(1);
 }
 
+// Line of the field, or of its nearest existing parent when the field is missing.
+function lineOf(path: (string | number)[]): string {
+  for (let n = path.length; n > 0; n--) {
+    const node = doc.getIn(path.slice(0, n), true) as { range?: [number, number] } | undefined;
+    if (node?.range) return `:${lines.linePos(node.range[0]).line}`;
+  }
+  return "";
+}
+
 const res = validateConfig(doc.toJS());
 if (!res.ok) {
   console.error(`${input}: invalid config`);
   for (const issue of res.issues) {
-    const node = doc.getIn(issue.path, true) as { range?: [number, number] } | undefined;
-    const at = node?.range ? `:${lines.linePos(node.range[0]).line}` : "";
+    const at = lineOf(issue.path);
     console.error(`  ${input}${at} ${formatPath(issue.path)}: ${issue.message}`);
   }
   process.exit(1);
