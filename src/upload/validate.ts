@@ -77,7 +77,7 @@ export function checkInit(body: unknown, band: Band): Checked {
     show = band.shows.find((s) => s.id === b.showId);
     if (!show) return bad(400, "That show isn't on the list; pick another.");
   }
-  // b.turnstileToken is accepted and ignored until Turnstile lands.
+  // b.turnstileToken was already verified by the handler (src/upload/turnstile.ts).
 
   return {
     ok: true,

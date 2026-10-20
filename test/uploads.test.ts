@@ -4,6 +4,7 @@ import { torontoDate } from "../src/config/shows";
 import { GiB, MiB } from "../src/upload/validate";
 import { direct, freshBand, http, media, SHOW_NIGHT } from "./upload-helpers";
 import type { Init } from "./upload-helpers";
+import { DUMMY_TOKEN } from "./fakes/siteverify";
 
 const KEY_TAIL = /^(\d{8}T\d{6}|unknown)__([a-z0-9-]+)__([0-9a-f]{8})\.([a-z0-9]+)$/;
 
@@ -60,8 +61,8 @@ describe("POST /api/uploads → key protocol", () => {
     expect(bad.status).toBe(400);
   });
 
-  it("empty browser type is inferred from the extension; turnstileToken is ignored", async () => {
-    const { obj } = await uploadSmall({ name: "v.MOV", type: "", turnstileToken: "x" });
+  it("empty browser type is inferred from the extension", async () => {
+    const { obj } = await uploadSmall({ name: "v.MOV", type: "" });
     expect(obj.httpMetadata?.contentType).toBe("video/quicktime");
   });
 
@@ -139,16 +140,18 @@ describe("init refusals", () => {
 
   it("rate limit: 31st POST from one IP in a minute → 429, other IPs unaffected", async () => {
     const ip = crypto.randomUUID();
-    // Invalid bodies still count: the limit sits before validation and costs no R2 calls.
-    for (let i = 0; i < 30; i++) expect((await http.init({}, ip)).status).toBe(400);
-    const res = await http.init({}, ip);
+    // Invalid bodies still count: the limit sits before Turnstile and validation.
+    const invalid = { turnstileToken: DUMMY_TOKEN };
+    for (let i = 0; i < 30; i++) expect((await http.init(invalid, ip)).status).toBe(400);
+    const res = await http.init(invalid, ip);
     expect(res.status).toBe(429);
     expect((await res.json<{ reason: string }>()).reason).toMatch(/too many/i);
-    expect((await http.init({})).status).toBe(400);
+    expect((await http.init(invalid)).status).toBe(400);
   });
 
-  it("malformed body → 400", async () => {
-    const res = await http.init("not an object");
+  it("verified token but no file details → 400", async () => {
+    const res = await http.init({ turnstileToken: DUMMY_TOKEN });
     expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ reason: "The file needs a name." });
   });
 });

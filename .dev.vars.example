@@ -2,3 +2,7 @@
 #   openssl rand -base64 32
 # Production: `npx wrangler secret put UPLOAD_SIGNING_KEY`.
 UPLOAD_SIGNING_KEY=dev-only-change-me
+# Cloudflare's public always-pass Turnstile test secret (2x… always fails, 3x… "already
+# spent"). Pair it with the test sitekey 1x00000000000000000000AA (README, "Turnstile").
+# Production: the widget's real secret via `wrangler secret put TURNSTILE_SECRET`.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA

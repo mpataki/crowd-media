@@ -10,6 +10,7 @@ import { objectPrefix, pickShow, torontoDate } from "../config/shows";
 import type { ShowPick } from "../config/shows";
 import { creditSlug, objectKey } from "../upload/keys";
 import { signToken, verifyToken } from "../upload/token";
+import { verifyTurnstile } from "../upload/turnstile";
 import type { UploadToken } from "../upload/token";
 import { GiB, MiB, checkInit } from "../upload/validate";
 
@@ -21,16 +22,19 @@ const CREDIT_META_MAX = 100;
 const fail = (status: number, reason: string, extra?: Record<string, unknown>) =>
   Response.json({ reason, ...extra }, { status });
 
+/** A required secret is unset: tell the operator how to set it, tell the guest it's not them. */
+function notConfigured(secret: string, status: number, reason: string): Response {
+  console.error(`${secret} is not set: \`wrangler secret put ${secret}\` (locally: .dev.vars)`);
+  return fail(status, reason);
+}
+
 export async function uploads(request: Request, env: Env, band: Band, path: string): Promise<Response> {
   const m = /^\/api\/uploads(?:\/([^/]+)(\/complete|\/parts\/([^/]+))?)?$/.exec(path);
   if (!m) return Response.json({ error: "not_found" }, { status: 404 });
   const [, rawId, tail, n] = m;
   const method = request.method;
 
-  if (!env.UPLOAD_SIGNING_KEY) {
-    console.error("UPLOAD_SIGNING_KEY is not set: `wrangler secret put UPLOAD_SIGNING_KEY` (locally: .dev.vars)");
-    return fail(500, "Uploads aren't set up yet.");
-  }
+  if (!env.UPLOAD_SIGNING_KEY) return notConfigured("UPLOAD_SIGNING_KEY", 500, "Uploads aren't set up yet.");
   if (!rawId) return method === "POST" ? init(request, env, band) : notAllowed();
 
   const token = await verifyToken(decodeURIComponent(rawId), env.UPLOAD_SIGNING_KEY);
@@ -48,17 +52,33 @@ const counters = (env: Env, band: string) => env.COUNTERS.get(env.COUNTERS.idFro
 
 async function init(request: Request, env: Env, band: Band): Promise<Response> {
   if (band.paused) return fail(503, `${band.name} isn't taking uploads right now.`);
-  const ip = request.headers.get("CF-Connecting-IP") ?? "local";
-  if (!(await env.UPLOAD_RL.limit({ key: ip })).success) {
+  // Inert until configured: no secret means no uploads, never "uploads without a check".
+  if (!env.TURNSTILE_SECRET) {
+    return notConfigured("TURNSTILE_SECRET", 503, "Uploads aren't set up yet (Turnstile secret missing).");
+  }
+  const remoteip = request.headers.get("CF-Connecting-IP");
+  if (!(await env.UPLOAD_RL.limit({ key: remoteip ?? "local" })).success) {
     return fail(429, "Too many uploads at once; wait a minute and try again.");
   }
 
-  let body: unknown;
+  let body: unknown = null;
   try {
     body = await request.json();
   } catch {
-    return fail(400, "Upload details are missing.");
+    // Unreadable: no token in it either, so the check below refuses it.
   }
+  // Before validation: an unverified caller learns nothing about what would be accepted.
+  const token = (body as { turnstileToken?: unknown } | null)?.turnstileToken;
+  const human = await verifyTurnstile((u, i) => fetch(u, i), env.TURNSTILE_SECRET, token, remoteip);
+  if (!human.ok && human.kind === "unavailable") {
+    console.error("turnstile siteverify unavailable", human.detail);
+    return fail(503, "The bot check is unavailable right now; try again shortly.");
+  }
+  if (!human.ok) {
+    console.warn("turnstile rejected", human.codes.join(","));
+    return fail(403, "Verification failed — reload the page and try again.");
+  }
+
   const checked = checkInit(body, band);
   if (!checked.ok) return fail(checked.status, checked.reason);
   const req = checked.value;

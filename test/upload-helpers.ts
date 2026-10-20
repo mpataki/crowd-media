@@ -3,6 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import { uploads } from "../src/api/uploads";
 import { config } from "../src/config";
 import type { Band } from "../src/config";
+import { DUMMY_TOKEN } from "./fakes/siteverify";
 
 export const foolhearts = config.bands.find((b) => b.slug === "foolhearts")!;
 export const HOST = "https://share.foolhearts.com";
@@ -15,11 +16,13 @@ export function freshBand(over: Partial<Band> = {}): Band {
 }
 
 export type InitBody = Record<string, unknown>;
+/** A valid init body, token included (the suite's secret is the always-pass test secret). */
 export const media = (over: InitBody = {}): InitBody => ({
   name: "clip.mp4",
   size: 10,
   type: "video/mp4",
   lastModified: SHOW_NIGHT,
+  turnstileToken: DUMMY_TOKEN,
   ...over,
 });
 
@@ -40,10 +43,10 @@ export const http = {
 
 /**
  * The uploads handler called directly with a test band (paused, custom slug) and an env
- * whose MEDIA records which R2 methods ran — the handler is the production code path the
- * router dispatches to.
+ * whose MEDIA records which R2 methods ran; `over` swaps other bindings (TURNSTILE_SECRET).
+ * The handler is the production code path the router dispatches to.
  */
-export function direct(band: Band) {
+export function direct(band: Band, over: Partial<Env> = {}) {
   const r2Calls: string[] = [];
   // Records the R2 methods the handler uses, delegating to the real Miniflare bucket.
   const MEDIA = {
@@ -60,7 +63,7 @@ export function direct(band: Band) {
       return env.MEDIA.head(...a);
     },
   } as Pick<R2Bucket, "createMultipartUpload" | "resumeMultipartUpload" | "head"> as R2Bucket;
-  const testEnv = { ...env, MEDIA } as Env;
+  const testEnv = { ...env, MEDIA, ...over } as Env;
   const call = (method: string, path: string, init: RequestInit = {}) =>
     uploads(new Request(`${HOST}${path}`, { method, ...init }), testEnv, band, path);
   return {
