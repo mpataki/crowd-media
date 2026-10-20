@@ -106,6 +106,23 @@ describe("uploadFile", () => {
     expect(api.calls.map((c) => c.method)).toEqual(["POST", "PUT", "DELETE"]);
   });
 
+  it("one fresh token per init: a 403 shows the reason, the retry sends a new token", async () => {
+    const reason = "Verification failed — reload the page and try again.";
+    const refused = fakeApi({ partSize: MIB, init: Response.json({ reason }, { status: 403 }) });
+    const ok = fakeApi({ partSize: MIB });
+    let n = 0;
+    const tokens: UploadDeps["token"] = async () => `tok-${++n}`;
+    const withTokens = (fetch: Fetch): UploadDeps => ({ ...deps(fetch, []), token: tokens });
+
+    const err = await uploadFile(file(10), {}, withTokens(refused.fetch), () => {}).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 403, message: reason });
+    expect(refused.calls).toHaveLength(1);
+    await uploadFile(file(10), {}, withTokens(ok.fetch), () => {});
+    const sent = [refused.calls[0], ok.calls[0]].map((c) => (c.body as { turnstileToken: string }).turnstileToken);
+    expect(sent).toEqual(["tok-1", "tok-2"]);
+    expect(n).toBe(2);
+  });
+
   it("init rejection surfaces the server's reason verbatim, no retry, nothing to DELETE", async () => {
     const reason = `Slow down — ${crypto.randomUUID()}`;
     const api = fakeApi({ partSize: MIB, init: Response.json({ reason }, { status: 429 }) });
