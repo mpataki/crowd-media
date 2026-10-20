@@ -10,7 +10,7 @@ Requires Node 22. No Cloudflare login needed:
 
 ```bash
 npm ci
-cp .dev.vars.example .dev.vars   # upload signing key for local dev (gitignored)
+cp .dev.vars.example .dev.vars   # signing key + Turnstile test secret for local dev (gitignored)
 task dev   # http://localhost:8787 — GET /api/health → {"ok":true}
 ```
 
@@ -26,6 +26,25 @@ task test    # vitest, running inside the Workers runtime
 1. Edit `bands.yaml` (a show: `id`, `venue`, `starts` with offset like `2026-10-10T21:00-04:00`).
 2. `task check` — validates, regenerates `src/config/generated.json`; commit both.
 3. `task deploy`.
+
+## Turnstile locally
+
+`POST /api/uploads` needs a Turnstile token whenever `TURNSTILE_SECRET` is set, and
+answers 503 "Uploads aren't set up yet (Turnstile secret missing)." when it isn't
+(`/api/band` and the page keep working). `.dev.vars.example` carries Cloudflare's
+always-pass **test** secret; to upload through `task dev`, give the page the matching
+test sitekey for the session only:
+
+1. In `bands.yaml` set `turnstile.sitekey: "1x00000000000000000000AA"` (always passes;
+   `2x00000000000000000000AB` always fails, `3x00000000000000000000FF` forces the
+   interactive challenge).
+2. `task dev`, upload from http://localhost:8787/foolhearts/.
+3. Put `sitekey` back as it was and rerun `task config` before committing — never
+   commit a test sitekey.
+
+With an empty sitekey the page sends no token and every init gets 403 "Verification
+failed — reload the page and try again." Tests never call Cloudflare except one check
+of the always-pass secret; `CI=1` or `TURNSTILE_OFFLINE=1` skips it.
 
 ## Upload page against a mock API
 
@@ -55,6 +74,11 @@ tokens) is Terraform in `mp-infra`; `wrangler.jsonc` only names bindings.
   yet." until the Worker has `UPLOAD_SIGNING_KEY`:
   `openssl rand -base64 32 | op run --env-file=.env -- npx wrangler secret put UPLOAD_SIGNING_KEY`.
   Rotating it invalidates in-flight uploads only (guests restart them).
+- **Turnstile secret (once per account, before the first deploy that requires it):**
+  `wrangler deploy` refuses while a `secrets.required` name is unset on the Worker, so
+  set `TURNSTILE_SECRET` (the widget's secret from mp-infra, kept in 1Password) with
+  `op run --env-file=.env -- npx wrangler secret put TURNSTILE_SECRET` first. Without
+  it, upload init answers 503 naming the missing secret.
 - **CI:** `.github/workflows/deploy.yml`. Pull requests always run
   `wrangler deploy --dry-run`. The push-to-`main` deploy job is **off until** the repo
   variable `CF_CI_DEPLOY` is `true`; turning it on also requires the secrets
