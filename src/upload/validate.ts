@@ -69,7 +69,7 @@ export function checkInit(body: unknown, band: Band): Checked {
     if (typeof t !== "number" || !Number.isFinite(t) || Math.abs(t) > DATE_MAX_MS) {
       return bad(400, "The file's date is unreadable.");
     }
-    lastModified = b.lastModified;
+    lastModified = t;
   }
 
   let credit: string | undefined;
