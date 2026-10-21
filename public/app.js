@@ -304,25 +304,12 @@ var Queue = class {
   }
 };
 
-// src/page/dom/turnstile.ts
-var SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-function turnstileTokens(sitekey, el) {
-  if (sitekey === "") return async () => void 0;
-  let api;
+// src/page/tokens.ts
+function tokenSource(sitekey, el, load) {
+  if (sitekey === null) return async () => void 0;
   let widget;
   let used = false;
   let pending;
-  const load = () => api ?? (api = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = SCRIPT;
-    s.async = true;
-    s.onload = () => window.turnstile ? resolve(window.turnstile) : reject(new Error("Turnstile did not load."));
-    s.onerror = () => {
-      api = void 0;
-      reject(new Error("Couldn't load the bot check \u2014 check your signal and retry."));
-    };
-    document.head.append(s);
-  }));
   return async () => {
     const ts = await load();
     const token = new Promise((resolve, reject) => pending = { resolve, reject });
@@ -342,6 +329,24 @@ function turnstileTokens(sitekey, el) {
     ts.execute(widget);
     return token;
   };
+}
+
+// src/page/dom/turnstile.ts
+var SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+function turnstileTokens(sitekey, el) {
+  let api;
+  const load = () => api ?? (api = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = SCRIPT;
+    s.async = true;
+    s.onload = () => window.turnstile ? resolve(window.turnstile) : reject(new Error("Turnstile did not load."));
+    s.onerror = () => {
+      api = void 0;
+      reject(new Error("Couldn't load the bot check \u2014 check your signal and retry."));
+    };
+    document.head.append(s);
+  }));
+  return tokenSource(sitekey, el, load);
 }
 
 // src/page/main.ts
@@ -379,7 +384,7 @@ async function boot() {
       fetch: (u, i) => fetch(u, i),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       base,
-      token: turnstileTokens(info.turnstile.sitekey, byId("turnstile"))
+      token: turnstileTokens(info.turnstile?.sitekey ?? null, byId("turnstile"))
     },
     meta: () => ({ credit: credit.value.trim() || void 0, showId: picked() }),
     onChange: () => {

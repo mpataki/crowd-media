@@ -74,7 +74,8 @@ const Band = v.pipe(
 
 const Config = v.pipe(
   v.strictObject({
-    turnstile: v.strictObject({ sitekey: v.string() }),
+    // Absent = no widget (the page sends no token). Present means a real sitekey.
+    turnstile: v.optional(v.strictObject({ sitekey: nonEmpty })),
     bands: v.pipe(
       v.record(
         // "api" would make /api/... ambiguous on unclaimed hosts.
@@ -92,7 +93,7 @@ const Config = v.pipe(
     ["bands"],
   ),
   v.transform((c) => ({
-    turnstile: c.turnstile,
+    turnstile: c.turnstile ?? null,
     bands: Object.entries(c.bands).map(([slug, b]) => ({
       slug,
       name: b.name,

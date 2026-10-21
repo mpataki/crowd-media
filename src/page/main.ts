@@ -44,7 +44,7 @@ async function boot(): Promise<void> {
       fetch: (u, i) => fetch(u, i),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       base,
-      token: turnstileTokens(info.turnstile.sitekey, byId("turnstile")),
+      token: turnstileTokens(info.turnstile?.sitekey ?? null, byId("turnstile")),
     },
     meta: () => ({ credit: credit.value.trim() || undefined, showId: picked() }),
     onChange: () => {

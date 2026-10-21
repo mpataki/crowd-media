@@ -16,7 +16,8 @@ it routes `/api/*` itself and hands static paths to `ASSETS`.
   host `/<band>` and `/<band>/` serve the root asset (the page) and `/` is 404 (no
   default band); every other non-API path goes to `ASSETS` unchanged, so the page uses
   absolute asset URLs.
-- `bands.yaml` — bands, hosts, caps, `paused`, shows, themes, Turnstile sitekey.
+- `bands.yaml` — bands, hosts, caps, `paused`, shows, themes, Turnstile sitekey (optional
+  block: absent = no widget, `/api/band` sends `turnstile: null`; present = non-empty).
   `task config` (`scripts/build-config.ts`, Node, build-time) validates it with the
   valibot schema in `src/config/schema.ts` and writes `src/config/generated.json`
   (committed). The Worker imports only that JSON: no YAML parser or validator in the

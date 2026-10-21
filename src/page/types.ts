@@ -19,7 +19,8 @@ export interface BandInfo {
   show: Show | null;
   reason: "capture" | "recent" | "none";
   recent: Show[];
-  turnstile: { sitekey: string };
+  /** null when bands.yaml has no turnstile block: no widget, no token. */
+  turnstile: { sitekey: string } | null;
 }
 
 /** What init accepts: lowercase extensions without the dot, and the per-file cap. */

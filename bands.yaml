@@ -3,9 +3,9 @@
 # winter. A show's `ends` defaults to starts + 5 h; `theme` on a show overrides the
 # band's theme field by field for that night.
 
-# Turnstile sitekey (public). Empty until the widget exists in Cloudflare.
+# Turnstile sitekey (public). Omit the block to run without the widget.
 turnstile:
-  sitekey: ""
+  sitekey: "0x4AAAAAAFehIaaC2Xg3LIqB"
 
 bands:
   foolhearts:

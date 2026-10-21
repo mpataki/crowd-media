@@ -1,13 +1,13 @@
 // GET /api/band — what the upload page renders before any file is chosen. Contract
 // shared with the page; keep field names stable.
 import { config } from "../config";
-import type { Band } from "../config";
+import type { Band, Config } from "../config";
 import { pickShow, recentShows, themeFor } from "../config/shows";
 import { ACCEPTED_EXTENSIONS } from "../upload/validate";
 
 const RECENT_LIMIT = 5;
 
-export function bandInfo(band: Band, nowMs: number) {
+export function bandInfo(band: Band, nowMs: number, cfg: Pick<Config, "turnstile"> = config) {
   const pick = pickShow(band, null, nowMs);
   const brief = (s: { id: string; venue: string; starts: string }) => ({ id: s.id, venue: s.venue, starts: s.starts });
   return {
@@ -21,6 +21,7 @@ export function bandInfo(band: Band, nowMs: number) {
     show: pick.show ? brief(pick.show) : null,
     reason: pick.reason,
     recent: recentShows(band, nowMs, RECENT_LIMIT).map(brief),
-    turnstile: { sitekey: config.turnstile.sitekey },
+    // null = Turnstile off (no block in bands.yaml): the page loads no widget.
+    turnstile: cfg.turnstile,
   };
 }

@@ -1,30 +1,19 @@
-// Cloudflare Turnstile, explicit render. Tokens are single-use (300 s), so each init gets
-// a fresh one: execute, wait for the callback, and reset before the next execute.
-
-interface TurnstileApi {
-  render(el: HTMLElement, opts: Record<string, unknown>): string;
-  execute(id: string): void;
-  reset(id: string): void;
-}
+// Cloudflare Turnstile, explicit render: loads the script once and hands it to the
+// DOM-free token source (../tokens.ts).
+import { tokenSource, type TurnstileApi } from "../tokens";
 
 declare global {
   interface Window {
-    turnstile?: TurnstileApi;
+    turnstile?: TurnstileApi<HTMLElement>;
   }
 }
 
 const SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
-/** Returns a token source; with an empty sitekey it yields no token and loads nothing. */
-export function turnstileTokens(sitekey: string, el: HTMLElement): () => Promise<string | undefined> {
-  if (sitekey === "") return async () => undefined;
-
-  let api: Promise<TurnstileApi> | undefined;
-  let widget: string | undefined;
-  let used = false;
-  let pending: { resolve: (t: string) => void; reject: (e: Error) => void } | undefined;
-
-  const load = (): Promise<TurnstileApi> =>
+/** Returns a token source; with no sitekey (Turnstile off) it yields no token and loads nothing. */
+export function turnstileTokens(sitekey: string | null, el: HTMLElement): () => Promise<string | undefined> {
+  let api: Promise<TurnstileApi<HTMLElement>> | undefined;
+  const load = (): Promise<TurnstileApi<HTMLElement>> =>
     (api ??= new Promise((resolve, reject) => {
       const s = document.createElement("script");
       s.src = SCRIPT;
@@ -36,24 +25,5 @@ export function turnstileTokens(sitekey: string, el: HTMLElement): () => Promise
       };
       document.head.append(s);
     }));
-
-  return async () => {
-    const ts = await load();
-    const token = new Promise<string>((resolve, reject) => (pending = { resolve, reject }));
-    if (widget === undefined) {
-      widget = ts.render(el, {
-        sitekey,
-        execution: "execute",
-        appearance: "interaction-only",
-        callback: (t: string) => pending?.resolve(t),
-        "error-callback": () => pending?.reject(new Error("Bot check failed — tap to retry.")),
-        "expired-callback": () => (used = true),
-      });
-    } else if (used) {
-      ts.reset(widget);
-    }
-    used = true;
-    ts.execute(widget);
-    return token;
-  };
+  return tokenSource(sitekey, el, load);
 }

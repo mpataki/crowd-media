@@ -36,27 +36,36 @@ describe("bands.yaml", () => {
 
   it("rejects a missing required field, naming it", () => {
     const { name: _drop, ...nameless } = band([]);
-    expect(issuePaths({ turnstile: { sitekey: "" }, bands: { one: nameless } })).toEqual([
+    expect(issuePaths({ bands: { one: nameless } })).toEqual([
       expect.stringMatching(/^bands\.one\.name: /),
     ]);
   });
 
   it("rejects a host claimed by two bands", () => {
     const bands = { one: band(["a.example.com"]), two: band(["a.example.com"]) };
-    expect(issuePaths({ turnstile: { sitekey: "" }, bands })).toEqual([
+    expect(issuePaths({ bands })).toEqual([
       "bands: a host may belong to only one band",
     ]);
   });
 
   it('reserves the band slug "api"', () => {
-    expect(issuePaths({ turnstile: { sitekey: "" }, bands: { api: band([]) } })).toEqual([
+    expect(issuePaths({ bands: { api: band([]) } })).toEqual([
       expect.stringMatching(/^bands\.api: .*reserved/),
     ]);
   });
 
+  it("turnstile block is optional (absent → null); present needs a non-empty sitekey", () => {
+    const res = validateConfig({ bands: { b: band([]) } });
+    expect(res.ok && res.config.turnstile).toBeNull();
+    expect(issuePaths({ turnstile: { sitekey: "" }, bands: { b: band([]) } })).toEqual([
+      expect.stringMatching(/^turnstile\.sitekey: must not be empty/),
+    ]);
+    const on = validateConfig({ turnstile: { sitekey: "0x4AAA" }, bands: { b: band([]) } });
+    expect(on.ok && on.config.turnstile).toEqual({ sitekey: "0x4AAA" });
+  });
+
   it("defaults ends to starts + 5 h and paused to false", () => {
     const res = validateConfig({
-      turnstile: { sitekey: "" },
       bands: {
         b: {
           ...band([]),

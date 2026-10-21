@@ -18,7 +18,7 @@ describe("GET /api/band", () => {
       caps: { fileMb: 2048, dayGb: 20, monthGb: 100 },
       accept: { extensions: [...ACCEPTED_EXTENSIONS], maxFileMb: 2048 },
       paused: false,
-      turnstile: { sitekey: "" },
+      turnstile: { sitekey: config.turnstile!.sitekey },
     });
     expect(body.accept.extensions).toEqual(expect.arrayContaining(["jpg", "heic", "mov", "mp4"]));
     expect(body.accept.extensions).not.toContain("gif");
@@ -39,8 +39,12 @@ describe("GET /api/band", () => {
       show: null,
       reason: "none",
       recent: [],
-      turnstile: { sitekey: "" },
+      turnstile: { sitekey: config.turnstile!.sitekey },
     });
+  });
+
+  it("no turnstile block → turnstile: null (page treats it as off)", () => {
+    expect(bandInfo(foolhearts, Date.now(), { turnstile: null }).turnstile).toBeNull();
   });
 
   it("the chosen show's theme override wins; without a show, the band theme", () => {

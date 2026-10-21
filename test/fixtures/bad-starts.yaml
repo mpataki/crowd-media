@@ -1,5 +1,4 @@
 # Invalid on purpose: `starts` has no offset. Used by test/config.test.ts.
-turnstile: { sitekey: "" }
 bands:
   testband:
     name: Test Band

@@ -82,7 +82,7 @@ async function api(req, res, path, q) {
       show: none ? null : recent[0],
       reason: none ? "none" : "capture",
       recent,
-      turnstile: { sitekey: "" },
+      turnstile: null,
     });
   }
   if (m === "POST" && path === "/uploads") {

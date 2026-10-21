@@ -42,8 +42,10 @@ test sitekey for the session only:
 3. Put `sitekey` back as it was and rerun `task config` before committing — never
    commit a test sitekey.
 
-With an empty sitekey the page sends no token and every init gets 403 "Verification
-failed — reload the page and try again." Tests never call Cloudflare except one check
+Without a `turnstile` block (`/api/band` answers `turnstile: null`) the page loads no
+widget and sends no token, so while `TURNSTILE_SECRET` is set every init gets 403
+"Verification failed — reload the page and try again." An empty `sitekey` fails
+`task config`. Tests never call Cloudflare except one check
 of the always-pass secret; `CI=1` or `TURNSTILE_OFFLINE=1` skips it.
 
 ## Upload page against a mock API
