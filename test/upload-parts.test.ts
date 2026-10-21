@@ -131,6 +131,13 @@ describe("parts (one-part uploads through the router)", () => {
     expect((await d.abort(expired)).status).toBe(200);
   });
 
+  it("malformed %-encoding in the id → 401, not 500", async () => {
+    for (const id of ["%E0%A4%A", "%", "abc%zz.def"]) {
+      const res = await http.part(id, 1, new Uint8Array(10));
+      expect(res.status).toBe(401);
+    }
+  });
+
   it("a token from another band → 401", async () => {
     const i = await init();
     const res = await direct(freshBand()).part(i.id, 1, new Uint8Array(10));

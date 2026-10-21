@@ -39,7 +39,9 @@ export async function uploads(request: Request, env: Env, band: Band, path: stri
   if (!env.UPLOAD_SIGNING_KEY) return notConfigured("UPLOAD_SIGNING_KEY", 500, "Uploads aren't set up yet.");
   if (!rawId) return method === "POST" ? init(request, env, band) : notAllowed();
 
-  const token = await verifyToken(decodeURIComponent(rawId), env.UPLOAD_SIGNING_KEY);
+  // Not decoded: an id is base64url + ".", so any %-escape makes it invalid anyway (and a
+  // malformed one would make decodeURIComponent throw).
+  const token = await verifyToken(rawId, env.UPLOAD_SIGNING_KEY);
   // A token from another band is as invalid here as a forged one.
   if (!token || token.band !== band.slug) return fail(401, "This upload link isn't valid; start the upload again.");
 
