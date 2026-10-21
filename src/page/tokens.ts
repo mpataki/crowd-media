@@ -30,6 +30,8 @@ export function tokenSource<El>(
         appearance: "interaction-only",
         callback: (t: string) => pending?.resolve(t),
         "error-callback": () => pending?.reject(new Error("Bot check failed — tap to retry.")),
+        // An unanswered interactive challenge: fail the row instead of leaving it at 0 %.
+        "timeout-callback": () => pending?.reject(new Error("Bot check timed out — tap to retry.")),
         "expired-callback": () => (used = true),
       });
     } else if (used) {

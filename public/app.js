@@ -320,6 +320,8 @@ function tokenSource(sitekey, el, load) {
         appearance: "interaction-only",
         callback: (t) => pending?.resolve(t),
         "error-callback": () => pending?.reject(new Error("Bot check failed \u2014 tap to retry.")),
+        // An unanswered interactive challenge: fail the row instead of leaving it at 0 %.
+        "timeout-callback": () => pending?.reject(new Error("Bot check timed out \u2014 tap to retry.")),
         "expired-callback": () => used = true
       });
     } else if (used) {
