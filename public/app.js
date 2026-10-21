@@ -87,27 +87,25 @@ function retryDelay(failures, status) {
 
 // src/page/upload.ts
 var UploadError = class extends Error {
-  constructor(status, message) {
+  constructor(status, message, retryAfter) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
 };
 var NETWORK = "Connection lost \u2014 check your signal.";
-async function uploadFile(file, meta, deps, onProgress) {
-  const turnstileToken = await deps.token();
-  const init = await call(deps, `${deps.base}/uploads`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      lastModified: file.lastModified,
-      ...meta.credit ? { credit: meta.credit } : {},
-      ...meta.showId ? { showId: meta.showId } : {},
-      ...turnstileToken ? { turnstileToken } : {}
-    })
-  });
+var BUSY = "Busy \u2014 retrying in a minute\u2026";
+async function uploadFile(file, meta, deps, onProgress, onWait = () => {
+}) {
+  let init;
+  try {
+    init = await startUpload(file, meta, deps);
+  } catch (err) {
+    if (!(err instanceof UploadError && err.status === 429 && err.retryAfter !== void 0)) throw err;
+    onWait(BUSY);
+    await deps.sleep(err.retryAfter * 1e3);
+    init = await startUpload(file, meta, deps);
+  }
   const upload = `${deps.base}/uploads/${encodeURIComponent(init.id)}`;
   try {
     const plan = planParts(file.size, init.partSize);
@@ -143,6 +141,22 @@ async function uploadFile(file, meta, deps, onProgress) {
     throw err;
   }
 }
+async function startUpload(file, meta, deps) {
+  const turnstileToken = await deps.token();
+  return call(deps, `${deps.base}/uploads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified,
+      ...meta.credit ? { credit: meta.credit } : {},
+      ...meta.showId ? { showId: meta.showId } : {},
+      ...turnstileToken ? { turnstileToken } : {}
+    })
+  });
+}
 async function withRetry(deps, attempt) {
   for (let failures = 1; ; failures++) {
     try {
@@ -162,16 +176,25 @@ async function call(deps, url, init) {
   } catch {
     throw new UploadError(0, NETWORK);
   }
-  if (!res.ok) throw new UploadError(res.status, await reasonOf(res));
+  if (!res.ok) {
+    const { reason, retryAfter } = await errorOf(res);
+    throw new UploadError(res.status, reason, retryAfter);
+  }
   return await res.json();
 }
 async function reasonOf(res) {
+  return (await errorOf(res)).reason;
+}
+async function errorOf(res) {
+  let reason = `Upload failed (HTTP ${res.status}).`;
+  let retryAfter;
   try {
     const body = await res.json();
-    if (typeof body.reason === "string" && body.reason !== "") return body.reason;
+    if (typeof body.reason === "string" && body.reason !== "") reason = body.reason;
+    if (typeof body.retryAfter === "number" && body.retryAfter >= 0) retryAfter = body.retryAfter;
   } catch {
   }
-  return `Upload failed (HTTP ${res.status}).`;
+  return { reason, retryAfter };
 }
 
 // src/page/dom/queue.ts
@@ -254,7 +277,7 @@ var Queue = class {
         const pct = Math.floor(acked / size * 100);
         item.bar.value = pct;
         item.status.textContent = `Uploading ${pct} %`;
-      });
+      }, (message) => item.status.textContent = message);
       item.bar.value = 100;
       this.set(item, "done", "Done \u2713");
       this.sent++;

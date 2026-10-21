@@ -18,6 +18,8 @@ import { GiB, MiB, checkInit } from "../upload/validate";
 export const PART_SIZE = 32 * MiB;
 const MAX_PARTS = 10_000;
 const CREDIT_META_MAX = 100;
+/** UPLOAD_RL's period (wrangler.jsonc ratelimits[].simple.period). */
+const RATE_PERIOD_S = 60;
 
 const fail = (status: number, reason: string, extra?: Record<string, unknown>) =>
   Response.json({ reason, ...extra }, { status });
@@ -57,8 +59,11 @@ async function init(request: Request, env: Env, band: Band): Promise<Response> {
     return notConfigured("TURNSTILE_SECRET", 503, "Uploads aren't set up yet (Turnstile secret missing).");
   }
   const remoteip = request.headers.get("CF-Connecting-IP");
-  if (!(await env.UPLOAD_RL.limit({ key: remoteip ?? "local" })).success) {
-    return fail(429, "Too many uploads at once; wait a minute and try again.");
+  // Per band and IP: a venue's guests share one CGNAT address, and one band's crowd
+  // must not use up another's. `retryAfter` tells the page this 429 is worth one retry
+  // (a cap 429 carries none: waiting a minute won't help).
+  if (!(await env.UPLOAD_RL.limit({ key: `${band.slug}:${remoteip ?? "local"}` })).success) {
+    return fail(429, "Too many uploads at once; wait a minute and try again.", { retryAfter: RATE_PERIOD_S });
   }
 
   let body: unknown = null;

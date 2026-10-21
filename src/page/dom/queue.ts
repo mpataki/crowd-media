@@ -112,7 +112,7 @@ export class Queue {
         const pct = Math.floor((acked / size) * 100);
         item.bar.value = pct;
         item.status.textContent = `Uploading ${pct} %`;
-      });
+      }, (message) => (item.status.textContent = message));
       item.bar.value = 100;
       this.set(item, "done", "Done ✓");
       this.sent++;

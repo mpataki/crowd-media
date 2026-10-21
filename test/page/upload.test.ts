@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Fetch } from "../../src/page/types";
-import { uploadFile, UploadError, type UploadDeps } from "../../src/page/upload";
+import { BUSY, uploadFile, UploadError, type UploadDeps } from "../../src/page/upload";
 
 const MIB = 1024 * 1024;
 
@@ -14,16 +14,25 @@ interface Call {
  * In-memory fake of the /api/uploads contract. `failPart` maps part number → how many
  * times it fails (with `failStatus`) before succeeding.
  */
-function fakeApi(opts: { partSize: number; failPart?: Record<number, number>; failStatus?: number; init?: Response }) {
+function fakeApi(opts: {
+  partSize: number;
+  failPart?: Record<number, number>;
+  failStatus?: number;
+  /** Answer to every init; `inits` answers the first few in turn, then the default. */
+  init?: Response;
+  inits?: Response[];
+}) {
   const id = `u-${crypto.randomUUID()}`;
   const calls: Call[] = [];
   const failures = { ...opts.failPart };
+  const inits = [...(opts.inits ?? [])];
   const fetch: Fetch = async (url, init = {}) => {
     const method = init.method ?? "GET";
     const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body;
     calls.push({ method, url, body });
     if (method === "POST" && url.endsWith("/uploads")) {
-      if (opts.init) return opts.init;
+      const next = inits.shift() ?? opts.init;
+      if (next) return next;
       const req = body as { size: number };
       const parts = Math.ceil(req.size / opts.partSize);
       return Response.json({ id, key: "k", partSize: opts.partSize, parts });
@@ -123,7 +132,7 @@ describe("uploadFile", () => {
     expect(n).toBe(2);
   });
 
-  it("init rejection surfaces the server's reason verbatim, no retry, nothing to DELETE", async () => {
+  it("init rejection (a cap 429: no retryAfter) surfaces the server's reason verbatim, no retry, nothing to DELETE", async () => {
     const reason = `Slow down — ${crypto.randomUUID()}`;
     const api = fakeApi({ partSize: MIB, init: Response.json({ reason }, { status: 429 }) });
     const err = await uploadFile(file(10), {}, deps(api.fetch, []), () => {}).catch((e: unknown) => e);
@@ -131,5 +140,39 @@ describe("uploadFile", () => {
     expect((err as UploadError).message).toBe(reason);
     expect((err as UploadError).status).toBe(429);
     expect(api.calls).toHaveLength(1);
+  });
+
+  const busy = () =>
+    Response.json({ reason: "Too many uploads at once; wait a minute and try again.", retryAfter: 60 }, { status: 429 });
+
+  it("rate-limited init (429 + retryAfter) shows the wait, sleeps retryAfter, retries once with a fresh token", async () => {
+    const api = fakeApi({ partSize: MIB, inits: [busy()] });
+    const sleeps: number[] = [];
+    const waits: string[] = [];
+    let n = 0;
+    const d: UploadDeps = { ...deps(api.fetch, sleeps), token: async () => `tok-${++n}` };
+    await expect(uploadFile(file(10), {}, d, () => {}, (m) => waits.push(m))).resolves.toEqual({ key: "k" });
+    expect(waits).toEqual([BUSY]);
+    expect(BUSY).toBe("Busy — retrying in a minute…");
+    expect(sleeps).toEqual([60_000]);
+    const posts = api.calls.filter((c) => c.method === "POST" && c.url.endsWith("/uploads"));
+    expect(posts.map((c) => (c.body as { turnstileToken: string }).turnstileToken)).toEqual(["tok-1", "tok-2"]);
+  });
+
+  it("a second rate-limited init gives up with the server's reason", async () => {
+    const api = fakeApi({ partSize: MIB, inits: [busy(), busy()] });
+    const sleeps: number[] = [];
+    const err = await uploadFile(file(10), {}, deps(api.fetch, sleeps), () => {}).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 429, message: "Too many uploads at once; wait a minute and try again." });
+    expect(api.calls).toHaveLength(2);
+    expect(sleeps).toEqual([60_000]);
+  });
+
+  it.each([403, 413, 415, 503])("init %i is not retried", async (status) => {
+    const api = fakeApi({ partSize: MIB, init: Response.json({ reason: "no", retryAfter: 60 }, { status }) });
+    const sleeps: number[] = [];
+    await expect(uploadFile(file(10), {}, deps(api.fetch, sleeps), () => {})).rejects.toMatchObject({ status });
+    expect(api.calls).toHaveLength(1);
+    expect(sleeps).toEqual([]);
   });
 });

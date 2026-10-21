@@ -46,7 +46,7 @@ it routes `/api/*` itself and hands static paths to `ASSETS`.
 - `wrangler.jsonc` — Worker `crowd-media`: `main`, `assets` (`ASSETS` binding,
   `run_worker_first: true`), `observability`, `upload_source_maps`; bindings
   `MEDIA` (R2 `crowd-media`), `COUNTERS` (DO `BandCounters`, migration `v1`),
-  `UPLOAD_RL` (rate limit, namespace `1001`, 30/60 s); required secrets
+  `UPLOAD_RL` (rate limit, namespace `1001`, 120/60 s per band + IP); required secrets
   `UPLOAD_SIGNING_KEY` and `TURNSTILE_SECRET` (`.dev.vars` locally, from
   `.dev.vars.example`; tests set both in `vitest.config.ts`, Turnstile to Cloudflare's
   always-pass test secret; production `wrangler secret put`, which `wrangler deploy`

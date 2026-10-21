@@ -169,15 +169,39 @@ describe("init refusals", () => {
     expect(d.r2Calls).toEqual([]);
   });
 
-  it("rate limit: 31st POST from one IP in a minute → 429, other IPs unaffected", async () => {
+  it("rate limit: 40 real inits from one IP in a minute all succeed", async () => {
+    const ip = crypto.randomUUID();
+    for (let i = 0; i < 40; i++) {
+      const res = await http.init(media(), ip);
+      expect(res.status, await res.clone().text()).toBe(201);
+      await http.abort((await res.json<Init>()).id);
+    }
+  });
+
+  it("rate limit: 121st POST from one IP → 429 with retryAfter; other IPs and other bands unaffected", async () => {
     const ip = crypto.randomUUID();
     // Invalid bodies still count: the limit sits before Turnstile and validation.
     const invalid = { turnstileToken: DUMMY_TOKEN };
-    for (let i = 0; i < 30; i++) expect((await http.init(invalid, ip)).status).toBe(400);
+    for (let i = 0; i < 120; i++) expect((await http.init(invalid, ip)).status).toBe(400);
     const res = await http.init(invalid, ip);
     expect(res.status).toBe(429);
-    expect((await res.json<{ reason: string }>()).reason).toMatch(/too many/i);
+    expect(await res.json()).toEqual({ reason: "Too many uploads at once; wait a minute and try again.", retryAfter: 60 });
     expect((await http.init(invalid)).status).toBe(400);
+    const otherBand = await exports.default.fetch("http://localhost:8787/shivs/api/uploads", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": ip },
+      body: JSON.stringify(invalid),
+    });
+    expect(otherBand.status).toBe(400);
+  });
+
+  it("a cap 429 carries no retryAfter", async () => {
+    const band = freshBand();
+    const d = direct(band);
+    await seed(d.counters, band.caps.dayGb * GiB, torontoDate(Date.now()));
+    const res = await d.init(media());
+    expect(res.status).toBe(429);
+    expect(await res.json()).not.toHaveProperty("retryAfter");
   });
 
   it("verified token but no file details → 400", async () => {
