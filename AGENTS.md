@@ -28,7 +28,7 @@ it routes `/api/*` itself and hands static paths to `ASSETS`.
   headroom check; no `TURNSTILE_SECRET` → 503. `src/upload/`: `validate.ts` (init body,
   type/ext allow-list, size cap), `keys.ts`
   (key protocol `<prefix>/<capture>__<credit>__<uuid8>.<ext>`), `token.ts` (the upload
-  `id`: HMAC-signed, carries key/uploadId/sizes, so no per-upload state exists outside
+  `id`: HMAC-signed, carries key/uploadId/sizes and a 24 h `exp` (past it parts/complete → 410), so no per-upload state exists outside
   R2's multipart), `counters.ts` (`BandCounters`, SQLite DO per band: day and rolling-30-d
   byte caps; init only checks headroom, each part PUT charges its bytes to an in-flight
   ledger, complete commits them, abort refunds them, an upload idle 2 h is committed by the alarm).

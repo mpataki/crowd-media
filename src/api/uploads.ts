@@ -9,7 +9,7 @@ import type { Band } from "../config";
 import { objectPrefix, pickShow, torontoDate } from "../config/shows";
 import type { ShowPick } from "../config/shows";
 import { creditSlug, objectKey } from "../upload/keys";
-import { signToken, verifyToken } from "../upload/token";
+import { signToken, TOKEN_TTL_MS, verifyToken } from "../upload/token";
 import { verifyTurnstile } from "../upload/turnstile";
 import type { UploadToken } from "../upload/token";
 import { GiB, MiB, checkInit } from "../upload/validate";
@@ -43,6 +43,8 @@ export async function uploads(request: Request, env: Env, band: Band, path: stri
   // A token from another band is as invalid here as a forged one.
   if (!token || token.band !== band.slug) return fail(401, "This upload link isn't valid; start the upload again.");
 
+  // An expired id can still abort (cleanup), but no longer upload or finish.
+  if (tail && !(token.exp > Date.now())) return fail(410, "This upload link has expired; start the upload again.");
   if (tail === "/complete") return method === "POST" ? complete(request, env, token) : notAllowed();
   if (tail) return method === "PUT" ? putPart(request, env, token, n) : notAllowed();
   return method === "DELETE" ? abort(env, token) : notAllowed();
@@ -124,7 +126,16 @@ async function init(request: Request, env: Env, band: Band): Promise<Response> {
     return fail(502, "Storage is unavailable; try again shortly.");
   }
 
-  const t: UploadToken = { band: band.slug, key, uploadId, ledger: crypto.randomUUID(), partSize: PART_SIZE, parts, size: req.size };
+  const t: UploadToken = {
+    band: band.slug,
+    key,
+    uploadId,
+    ledger: crypto.randomUUID(),
+    partSize: PART_SIZE,
+    parts,
+    size: req.size,
+    exp: now + TOKEN_TTL_MS,
+  };
   return Response.json({ id: await signToken(t, env.UPLOAD_SIGNING_KEY), key, partSize: PART_SIZE, parts }, { status: 201 });
 }
 

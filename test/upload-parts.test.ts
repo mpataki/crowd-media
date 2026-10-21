@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { torontoDate } from "../src/config/shows";
+import { signToken, TOKEN_TTL_MS, verifyToken } from "../src/upload/token";
 import { MiB } from "../src/upload/validate";
 import { direct, freshBand, http, media } from "./upload-helpers";
 import type { Init } from "./upload-helpers";
@@ -111,6 +112,23 @@ describe("parts (one-part uploads through the router)", () => {
       expect((await res.json<{ reason: string }>()).reason).toMatch(/isn't valid/);
     }
     expect(d.r2Calls).toEqual([]);
+  });
+
+  it("a token past exp → 410 for part and complete, before R2; a fresh one carries exp = init + 24 h", async () => {
+    const d = direct(freshBand());
+    const before = Date.now();
+    const i = await (await d.init(media())).json<Init>();
+    const t = (await verifyToken(i.id, env.UPLOAD_SIGNING_KEY))!;
+    expect(t.exp - before).toBeGreaterThanOrEqual(TOKEN_TTL_MS);
+    expect(t.exp - Date.now()).toBeLessThanOrEqual(TOKEN_TTL_MS);
+    const expired = await signToken({ ...t, exp: Date.now() - 1 }, env.UPLOAD_SIGNING_KEY);
+    d.r2Calls.length = 0;
+    for (const res of [await d.part(expired, 1, new Uint8Array(10)), await d.complete(expired, [{ n: 1, etag: "e" }])]) {
+      expect(res.status).toBe(410);
+      expect((await res.json<{ reason: string }>()).reason).toMatch(/expired/);
+    }
+    expect(d.r2Calls).toEqual([]);
+    expect((await d.abort(expired)).status).toBe(200);
   });
 
   it("a token from another band → 401", async () => {

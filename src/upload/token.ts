@@ -14,7 +14,11 @@ export type UploadToken = {
   partSize: number;
   parts: number;
   size: number;
+  /** Epoch ms after which parts and complete answer 410 (init + TOKEN_TTL_MS). */
+  exp: number;
 };
+
+export const TOKEN_TTL_MS = 24 * 3_600_000;
 
 const enc = new TextEncoder();
 const keys = new Map<string, Promise<CryptoKey>>();
