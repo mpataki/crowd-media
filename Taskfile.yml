@@ -44,8 +44,8 @@ tasks:
       - npx vitest run
 
   deploy:
-    desc: Deploy the Worker, then smoke-check the deployed health route
-    deps: [config]
+    desc: Deploy the Worker (after check + test), then smoke-check the deployed health route
+    deps: [check, test]
     cmds:
       - op run --env-file=.env -- npx wrangler deploy
       - scripts/smoke-deployed.sh {{.WORKER_URL}}/api/health
