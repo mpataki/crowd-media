@@ -3,9 +3,12 @@ import { apiBase } from "../../src/page/base";
 import { planParts } from "../../src/page/plan";
 import { precheck } from "../../src/page/precheck";
 import { BACKOFF_BASE_MS, MAX_RETRIES, retryDelay } from "../../src/page/retry";
+import { config } from "../../src/config";
+import { ACCEPTED_EXTENSIONS, checkInit } from "../../src/upload/validate";
 import { consentText, onAccent, showLabel, summaryText } from "../../src/page/text";
 
 const MIB = 1024 * 1024;
+const foolhearts = config.bands.find((b) => b.slug === "foolhearts")!;
 
 describe("apiBase", () => {
   it.each([
@@ -66,21 +69,43 @@ describe("retryDelay", () => {
 });
 
 describe("precheck", () => {
-  const caps = { fileMb: 2048 };
+  // The page gets this from GET /api/band; the server's own list is the source.
+  const accept = { extensions: ACCEPTED_EXTENSIONS, maxFileMb: 2048 };
+  const f = (name: string, type: string, size = MIB) => ({ name, type, size });
+  /** What the server's init says about the same file. */
+  const serverReason = (file: { name: string; type: string; size: number }) => {
+    const res = checkInit({ ...file, lastModified: 1 }, foolhearts);
+    return res.ok ? null : res.reason;
+  };
+
   it("accepts photos and videos within the cap", () => {
-    expect(precheck({ type: "image/jpeg", size: MIB }, caps)).toBeNull();
-    expect(precheck({ type: "video/mp4", size: 2048 * MIB }, caps)).toBeNull();
+    expect(precheck(f("a.jpg", "image/jpeg"), accept)).toBeNull();
+    expect(precheck(f("a.mp4", "video/mp4", 2048 * MIB), accept)).toBeNull();
   });
-  it("rejects other types, including an unknown empty type", () => {
-    expect(precheck({ type: "application/pdf", size: 10 }, caps)).toBe("Only photos and videos can be uploaded.");
-    expect(precheck({ type: "", size: 10 }, caps)).toBe("Only photos and videos can be uploaded.");
+  it("extension is case-insensitive and an empty type is allowed (.MOV, .HEIC); the server agrees", () => {
+    for (const file of [f("IMG_1.MOV", ""), f("IMG_2.HEIC", "")]) {
+      expect(precheck(file, accept)).toBeNull();
+      expect(serverReason(file)).toBeNull();
+    }
+  });
+  it.each([
+    ["a.gif", "image/gif"],
+    ["a.avif", "image/avif"],
+    ["a.mkv", "video/x-matroska"],
+    ["doc.pdf", "application/pdf"],
+    ["a.mp4", "application/pdf"],
+    ["noext", ""],
+  ])("refuses %s (%s) with the server's wording", (name, type) => {
+    const reason = precheck(f(name, type), accept);
+    expect(reason).toBe("Only photos and videos can be uploaded.");
+    expect(reason).toBe(serverReason(f(name, type)));
   });
   it("rejects over-cap files with the cap in the reason", () => {
-    expect(precheck({ type: "video/mp4", size: 2048 * MIB + 1 }, caps)).toBe("Too big — the limit is 2 GB per file.");
-    expect(precheck({ type: "video/mp4", size: 600 * MIB }, { fileMb: 500 })).toBe("Too big — the limit is 500 MB per file.");
+    expect(precheck(f("a.mp4", "video/mp4", 2048 * MIB + 1), accept)).toBe("Too big — the limit is 2 GB per file.");
+    expect(precheck(f("a.mp4", "video/mp4", 600 * MIB), { ...accept, maxFileMb: 500 })).toBe("Too big — the limit is 500 MB per file.");
   });
   it("rejects empty files", () => {
-    expect(precheck({ type: "image/png", size: 0 }, caps)).toBe("This file is empty.");
+    expect(precheck(f("a.png", "image/png", 0), accept)).toBe("This file is empty.");
   });
 });
 

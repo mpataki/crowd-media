@@ -39,7 +39,7 @@ async function boot(): Promise<void> {
     list: byId("queue"),
     summary: byId("summary"),
     band: info.band.name,
-    caps: info.caps,
+    accept: info.accept,
     deps: {
       fetch: (u, i) => fetch(u, i),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),

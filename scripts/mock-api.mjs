@@ -17,6 +17,7 @@ import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
+import { ACCEPTED_EXTENSIONS } from "../src/upload/validate.ts";
 
 const { values: args } = parseArgs({
   options: { port: { type: "string", default: "8788" }, "part-mb": { type: "string", default: "32" } },
@@ -76,6 +77,7 @@ async function api(req, res, path, q) {
       canonicalUrl: `http://${HOST}:${PORT}/`,
       theme: { accent: "#c8102e", logo: "", blurb: "Shot something tonight? Send it our way." },
       caps: CAPS,
+      accept: { extensions: ACCEPTED_EXTENSIONS, maxFileMb: CAPS.fileMb },
       paused: q.get("paused") === "1",
       show: none ? null : recent[0],
       reason: none ? "none" : "capture",
@@ -91,7 +93,7 @@ async function api(req, res, path, q) {
     if (forced && initsSinceLoad === Number(q.get("on") ?? 2)) {
       return json(res, forced, { reason: REASONS[forced] ?? `Mock ${forced}.` });
     }
-    if (!/^(image|video)\//.test(body.type ?? "")) return json(res, 415, { reason: REASONS[415] });
+    if (body.type && !/^(image|video)\//.test(body.type)) return json(res, 415, { reason: REASONS[415] });
     if (body.size > CAPS.fileMb * 1024 * 1024) return json(res, 413, { reason: REASONS[413] });
     const id = randomUUID();
     const parts = Math.ceil(body.size / PART_SIZE);

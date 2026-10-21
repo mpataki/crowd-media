@@ -18,6 +18,9 @@ const EXT_TYPE: Record<string, string> = {
 };
 const NAME_MAX = 255;
 
+/** The allow-list the page prechecks with (GET /api/band `accept.extensions`). */
+export const ACCEPTED_EXTENSIONS: readonly string[] = Object.keys(EXT_FAMILY);
+
 export type InitRequest = {
   name: string;
   size: number;

@@ -19,13 +19,15 @@ function h(tag, props = {}, ...children) {
 
 // src/page/precheck.ts
 var MIB = 1024 * 1024;
-function precheck(file, caps) {
-  if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-    return "Only photos and videos can be uploaded.";
-  }
+var NOT_MEDIA = "Only photos and videos can be uploaded.";
+function precheck(file, accept) {
+  const dot = file.name.lastIndexOf(".");
+  const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
+  if (!accept.extensions.includes(ext)) return NOT_MEDIA;
+  if (file.type !== "" && !file.type.startsWith("image/") && !file.type.startsWith("video/")) return NOT_MEDIA;
   if (file.size === 0) return "This file is empty.";
-  if (file.size > caps.fileMb * MIB) {
-    return `Too big \u2014 the limit is ${formatMb(caps.fileMb)} per file.`;
+  if (file.size > accept.maxFileMb * MIB) {
+    return `Too big \u2014 the limit is ${formatMb(accept.maxFileMb)} per file.`;
   }
   return null;
 }
@@ -215,7 +217,7 @@ var Queue = class {
       const row = h("li", {}, name, bar, status, action);
       bar.setAttribute("aria-label", `${file.name} progress`);
       const item = { file, state: "ready", row, bar, status, action };
-      const reason = precheck(file, this.o.caps);
+      const reason = precheck(file, this.o.accept);
       if (reason) {
         item.state = "rejected";
         bar.hidden = true;
@@ -372,7 +374,7 @@ async function boot() {
     list: byId("queue"),
     summary: byId("summary"),
     band: info.band.name,
-    caps: info.caps,
+    accept: info.accept,
     deps: {
       fetch: (u, i) => fetch(u, i),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),

@@ -1,6 +1,7 @@
 import { precheck } from "../precheck";
 import { summaryText } from "../text";
 import { uploadFile, type UploadDeps, type UploadMeta } from "../upload";
+import type { Accept } from "../types";
 import { h } from "./el";
 
 type State = "ready" | "queued" | "uploading" | "done" | "failed" | "rejected";
@@ -18,7 +19,7 @@ export interface QueueOptions {
   list: HTMLUListElement;
   summary: HTMLElement;
   band: string;
-  caps: { fileMb: number };
+  accept: Accept;
   deps: UploadDeps;
   /** Read at each file's init, so credit/show edits mid-queue apply to later files. */
   meta: () => UploadMeta;
@@ -43,7 +44,7 @@ export class Queue {
       const row = h("li", {}, name, bar, status, action);
       bar.setAttribute("aria-label", `${file.name} progress`);
       const item: Item = { file, state: "ready", row, bar, status, action };
-      const reason = precheck(file, this.o.caps);
+      const reason = precheck(file, this.o.accept);
       if (reason) {
         item.state = "rejected";
         bar.hidden = true;

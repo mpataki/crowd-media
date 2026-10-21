@@ -2,6 +2,7 @@ import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { bandInfo } from "../src/api/band";
 import { config } from "../src/config";
+import { ACCEPTED_EXTENSIONS } from "../src/upload/validate";
 
 const get = (url: string) => exports.default.fetch(url);
 const foolhearts = config.bands.find((b) => b.slug === "foolhearts")!;
@@ -15,9 +16,12 @@ describe("GET /api/band", () => {
       band: { slug: "foolhearts", name: "Fool Hearts" },
       canonicalUrl: "https://share.foolhearts.com/",
       caps: { fileMb: 2048, dayGb: 20, monthGb: 100 },
+      accept: { extensions: [...ACCEPTED_EXTENSIONS], maxFileMb: 2048 },
       paused: false,
       turnstile: { sitekey: "" },
     });
+    expect(body.accept.extensions).toEqual(expect.arrayContaining(["jpg", "heic", "mov", "mp4"]));
+    expect(body.accept.extensions).not.toContain("gif");
     expect(["capture", "recent", "none"]).toContain(body.reason);
     expect(body.recent).toContainEqual({ id: "2026-10-10-the-dakota", venue: "The Dakota Tavern", starts: "2026-10-10T21:00-04:00" });
   });
@@ -30,6 +34,7 @@ describe("GET /api/band", () => {
       canonicalUrl: null,
       theme: { accent: "#1f6feb", logo: "/brand/shivs.svg", blurb: "Send us what you shot!" },
       caps: { fileMb: 2048, dayGb: 20, monthGb: 100 },
+      accept: { extensions: [...ACCEPTED_EXTENSIONS], maxFileMb: 2048 },
       paused: false,
       show: null,
       reason: "none",

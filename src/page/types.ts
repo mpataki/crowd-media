@@ -14,11 +14,18 @@ export interface BandInfo {
   canonicalUrl: string | null;
   theme: { accent: string; logo: string; blurb: string };
   caps: { fileMb: number; dayGb: number; monthGb: number };
+  accept: Accept;
   paused: boolean;
   show: Show | null;
   reason: "capture" | "recent" | "none";
   recent: Show[];
   turnstile: { sitekey: string };
+}
+
+/** What init accepts: lowercase extensions without the dot, and the per-file cap. */
+export interface Accept {
+  extensions: readonly string[];
+  maxFileMb: number;
 }
 
 export interface InitResponse {

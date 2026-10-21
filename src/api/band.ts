@@ -3,6 +3,7 @@
 import { config } from "../config";
 import type { Band } from "../config";
 import { pickShow, recentShows, themeFor } from "../config/shows";
+import { ACCEPTED_EXTENSIONS } from "../upload/validate";
 
 const RECENT_LIMIT = 5;
 
@@ -14,6 +15,8 @@ export function bandInfo(band: Band, nowMs: number) {
     canonicalUrl: band.hosts[0] ? `https://${band.hosts[0]}/` : null,
     theme: themeFor(band, pick.show),
     caps: band.caps,
+    // The server's own allow-list, so the page refuses exactly what init would.
+    accept: { extensions: ACCEPTED_EXTENSIONS, maxFileMb: band.caps.fileMb },
     paused: band.paused,
     show: pick.show ? brief(pick.show) : null,
     reason: pick.reason,
