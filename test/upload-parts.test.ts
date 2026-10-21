@@ -181,13 +181,11 @@ describe("parts (one-part uploads through the router)", () => {
     }
   });
 
-  it("complete with a wrong etag → 409 with R2's detail", async () => {
+  it("complete with a wrong etag → 409 with only the guest-facing reason (R2's error is logged)", async () => {
     const i = await init();
     await http.part(i.id, 1, new Uint8Array(10));
     const res = await http.complete(i.id, [{ n: 1, etag: "nope" }]);
     expect(res.status).toBe(409);
-    const body = await res.json<{ reason: string; detail: string }>();
-    expect(body.reason).toMatch(/couldn't be finished/);
-    expect(body.detail).not.toBe("");
+    expect(await res.json()).toEqual({ reason: "The upload couldn't be finished; start it again." });
   });
 });

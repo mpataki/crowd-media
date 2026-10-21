@@ -202,8 +202,9 @@ async function complete(request: Request, env: Env, t: UploadToken): Promise<Res
     // (and was counted then), so report success instead of a confusing failure.
     const existing = await env.MEDIA.head(t.key);
     if (existing && existing.size === t.size) return Response.json({ key: t.key });
+    // R2's error stays in the log: it names internals a guest can't act on.
     console.error("complete failed", t.key, err);
-    return fail(409, "The upload couldn't be finished; start it again.", { detail: String(err) });
+    return fail(409, "The upload couldn't be finished; start it again.");
   }
   try {
     await counters(env, t.band).finish(t.ledger);
