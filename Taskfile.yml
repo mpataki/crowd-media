@@ -1,12 +1,12 @@
 version: "3"
 
 # Local deploy is the chosen path (the GitHub Actions deploy job stays off unless
-# CF_CI_DEPLOY is set). Config comes from the 1Password Environment `crowd-media-deploy`,
+# CF_CI_DEPLOY is set). Config comes from the 1Password Environment `foolhearts-deploy`,
 # mounted by the 1Password app at ./.env (gitignored; a pipe the app serves, not a file
 # with values on disk). CLOUDFLARE_API_TOKEN there is an `op://` reference, not a value;
 # `op run --env-file=.env` resolves it for the deploy, so the token exists only inside
 # that process. If `.env` is missing, open 1Password → Developer → Environments →
-# crowd-media-deploy → mount it here.
+# foolhearts-deploy → mount it here.
 
 dotenv: [".env"]
 
@@ -47,7 +47,9 @@ tasks:
     desc: Deploy the Worker (after check + test), then smoke-check the deployed health route
     deps: [check, test]
     cmds:
-      - op run --env-file=.env -- npx wrangler deploy
+      # Secrets ride the deploy via --secrets-file from secrets.op.env (op:// refs only),
+      # resolved by `op inject` into a FIFO — never onto disk (scripts/deploy.sh).
+      - op run --env-file=.env -- scripts/deploy.sh
       - scripts/smoke-deployed.sh {{.WORKER_URL}}/api/health
 
   build-page:

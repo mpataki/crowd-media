@@ -69,18 +69,19 @@ tokens) is Terraform in `mp-infra`; `wrangler.jsonc` only names bindings.
 
 - **Local (the chosen path):** `task deploy` — `wrangler deploy` under `op run`, then a
   smoke check of `/api/health`. Credentials come from the 1Password Environment
-  `crowd-media-deploy`, which the 1Password app mounts at `./.env` (gitignored, never a
+  `foolhearts-deploy` (shared with fool_hearts; same account token), which the 1Password app mounts at `./.env` (gitignored, never a
   file with values). If `.env` is missing, mount it from 1Password → Developer →
   Environments.
-- **Upload signing key (once per account):** uploads answer 500 "Uploads aren't set up
-  yet." until the Worker has `UPLOAD_SIGNING_KEY`:
-  `openssl rand -base64 32 | op run --env-file=.env -- npx wrangler secret put UPLOAD_SIGNING_KEY`.
-  Rotating it invalidates in-flight uploads only (guests restart them).
-- **Turnstile secret (once per account, before the first deploy that requires it):**
-  `wrangler deploy` refuses while a `secrets.required` name is unset on the Worker, so
-  set `TURNSTILE_SECRET` (the widget's secret from mp-infra, kept in 1Password) with
-  `op run --env-file=.env -- npx wrangler secret put TURNSTILE_SECRET` first. Without
-  it, upload init answers 503 naming the missing secret.
+- **Secrets ride every deploy:** `wrangler deploy` refuses to create the Worker while a
+  `secrets.required` name is unset, and `wrangler secret put` can't precede the Worker,
+  so `scripts/deploy.sh` passes `--secrets-file`. `secrets.op.env` (committed) holds only
+  `op://` references; `op inject` resolves them and a FIFO in a 0700 temp dir hands them
+  to wrangler, so no value lands on disk. It expects two 1Password items, field
+  `credential`: `Private/Crowd Media Upload Signing Key` (`UPLOAD_SIGNING_KEY`, e.g.
+  `openssl rand -base64 32`; rotating it invalidates in-flight uploads only) and
+  `Private/Crowd Media Turnstile` (`TURNSTILE_SECRET`, the widget's secret from mp-infra).
+  Probe the plumbing without 1Password:
+  `SECRETS_TEMPLATE=<fake.env> SECRETS_INJECT=cat scripts/deploy.sh --dry-run`.
 - **CI:** `.github/workflows/deploy.yml`. Pull requests always run
   `wrangler deploy --dry-run`. The push-to-`main` deploy job is **off until** the repo
   variable `CF_CI_DEPLOY` is `true`; turning it on also requires the secrets
