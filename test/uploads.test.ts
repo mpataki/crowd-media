@@ -204,6 +204,17 @@ describe("init refusals", () => {
     expect(await res.json()).not.toHaveProperty("retryAfter");
   });
 
+  it.each([8.64e15, -8.64e15])("lastModified %d (edge of Date range) → not a 500", async (lastModified) => {
+    const res = await http.init(media({ lastModified }));
+    expect(res.status).toBeLessThan(500);
+  });
+
+  it.each([1e300, -1e300, 8.64e15 + 1])("lastModified %d (beyond Date's range) → 400, not 500", async (lastModified) => {
+    const res = await http.init(media({ lastModified }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ reason: "The file's date is unreadable." });
+  });
+
   it("verified token but no file details → 400", async () => {
     const res = await http.init({ turnstileToken: DUMMY_TOKEN });
     expect(res.status).toBe(400);

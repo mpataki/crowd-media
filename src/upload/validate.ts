@@ -17,6 +17,8 @@ const EXT_TYPE: Record<string, string> = {
   webm: "video/webm", "3gp": "video/3gpp",
 };
 const NAME_MAX = 255;
+/** ECMAScript's Date range: beyond it `new Date(t)` is Invalid and date helpers throw. */
+const DATE_MAX_MS = 8.64e15;
 
 /** The allow-list the page prechecks with (GET /api/band `accept.extensions`). */
 export const ACCEPTED_EXTENSIONS: readonly string[] = Object.keys(EXT_FAMILY);
@@ -63,7 +65,8 @@ export function checkInit(body: unknown, band: Band): Checked {
 
   let lastModified: number | null = null;
   if (b.lastModified !== undefined && b.lastModified !== null) {
-    if (typeof b.lastModified !== "number" || !Number.isFinite(b.lastModified)) {
+    const t = b.lastModified;
+    if (typeof t !== "number" || !Number.isFinite(t) || Math.abs(t) > DATE_MAX_MS) {
       return bad(400, "The file's date is unreadable.");
     }
     lastModified = b.lastModified;
