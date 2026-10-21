@@ -53,8 +53,8 @@ describe("multipart, real 32 MiB parts", () => {
     const body = new Uint8Array(await obj!.arrayBuffer());
     expect([body[0], body[32 * MiB], body[64 * MiB]]).toEqual([1, 2, 3]);
 
-    // Committed: the bytes now count, the reservation is gone.
-    expect(await d.counters.usage(torontoDate(Date.now()))).toEqual({ day: SIZE_70, rolling: SIZE_70, reserved: 0 });
+    // Committed: the bytes now count, none left in flight (the dropped attempt charged nothing).
+    expect(await d.counters.usage(torontoDate(Date.now()))).toEqual({ day: SIZE_70, rolling: SIZE_70, inflight: 0 });
   }, 30_000);
 });
 
@@ -80,15 +80,17 @@ describe("parts (one-part uploads through the router)", () => {
     expect(await again.json()).toEqual({ key: i.key });
   });
 
-  it("DELETE aborts the multipart and releases the reservation", async () => {
+  it("a part charges its bytes; DELETE aborts the multipart and refunds them", async () => {
     const d = direct(freshBand());
     const i = await (await d.init(media({ size: 10 }))).json<Init>();
     const day = torontoDate(Date.now());
-    expect((await d.counters.usage(day)).reserved).toBe(10);
+    expect((await d.counters.usage(day)).inflight).toBe(0);
+    expect((await d.part(i.id, 1, new Uint8Array(10))).status).toBe(200);
+    expect((await d.counters.usage(day)).inflight).toBe(10);
 
     const del = await d.abort(i.id);
     expect(del.status).toBe(200);
-    expect((await d.counters.usage(day)).reserved).toBe(0);
+    expect((await d.counters.usage(day)).inflight).toBe(0);
     // Aborted in R2: the upload no longer takes parts.
     const put = await d.part(i.id, 1, new Uint8Array(10));
     expect(put.status).toBe(410);

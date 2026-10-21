@@ -92,13 +92,13 @@ describe("POST /api/uploads → Turnstile", () => {
   it.each([
     ["always-fail", TEST_SECRET.fail],
     ["reused token (siteverify: timeout-or-duplicate)", TEST_SECRET.spent],
-  ])("%s → 403, nothing reserved, nothing in R2", async (_n, secret) => {
+  ])("%s → 403, nothing charged, nothing in R2", async (_n, secret) => {
     const d = direct(freshBand(), { TURNSTILE_SECRET: secret });
     const res = await d.init(media());
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual(VERIFY_FAILED);
     expect(d.r2Calls).toEqual([]);
-    expect((await d.counters.usage(torontoDate(Date.now()))).reserved).toBe(0);
+    expect((await d.counters.usage(torontoDate(Date.now()))).inflight).toBe(0);
   });
 
   it.each([

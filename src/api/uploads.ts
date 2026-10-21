@@ -2,7 +2,7 @@
 //   POST   /api/uploads                 init → { id, key, partSize, parts }
 //   PUT    /api/uploads/:id/parts/:n    raw part body → { etag }
 //   POST   /api/uploads/:id/complete    { parts: [{ n, etag }] } → { key }
-//   DELETE /api/uploads/:id             abort + release the cap reservation
+//   DELETE /api/uploads/:id             abort + refund the bytes it charged
 // `id` is a signed token (src/upload/token.ts): no per-upload state outside R2's own
 // multipart. Errors are `{ reason }`, one sentence the page shows verbatim.
 import type { Band } from "../config";
@@ -92,14 +92,12 @@ async function init(request: Request, env: Env, band: Band): Promise<Response> {
   const parts = Math.ceil(req.size / PART_SIZE);
   if (parts > MAX_PARTS) return fail(413, "That file is too big to upload.");
 
-  // Reserve before creating anything in R2: a capped band leaves no multipart behind.
-  const reservation = crypto.randomUUID();
-  const held = await counters(env, band.slug).reserve(reservation, req.size, torontoDate(now), {
-    dayBytes: band.caps.dayGb * GiB,
-    rollingBytes: band.caps.monthGb * GiB,
-  });
-  if (!held.ok) {
-    return held.cap === "day"
+  // Checked before creating anything in R2: a capped band leaves no multipart behind.
+  // Nothing is held: parts charge the cap as they land (putPart).
+  const limits = { dayBytes: band.caps.dayGb * GiB, rollingBytes: band.caps.monthGb * GiB };
+  const room = await counters(env, band.slug).headroom(torontoDate(now), limits, req.size);
+  if (!room.ok) {
+    return room.cap === "day"
       ? fail(429, "Daily cap reached for today's uploads; try again tomorrow.")
       : fail(429, "Monthly cap reached for uploads; try again in a few days.");
   }
@@ -117,12 +115,11 @@ async function init(request: Request, env: Env, band: Band): Promise<Response> {
     });
     uploadId = mpu.uploadId;
   } catch (err) {
-    await counters(env, band.slug).release(reservation);
     console.error("createMultipartUpload failed", key, err);
     return fail(502, "Storage is unavailable; try again shortly.");
   }
 
-  const t: UploadToken = { band: band.slug, key, uploadId, reservation, partSize: PART_SIZE, parts, size: req.size };
+  const t: UploadToken = { band: band.slug, key, uploadId, ledger: crypto.randomUUID(), partSize: PART_SIZE, parts, size: req.size };
   return Response.json({ id: await signToken(t, env.UPLOAD_SIGNING_KEY), key, partSize: PART_SIZE, parts }, { status: 201 });
 }
 
@@ -140,14 +137,23 @@ async function putPart(request: Request, env: Env, t: UploadToken, rawN: string)
     return fail(400, `Part ${n} must be exactly ${want} bytes.`);
   }
 
+  let part: R2UploadedPart;
   try {
-    const part = await env.MEDIA.resumeMultipartUpload(t.key, t.uploadId).uploadPart(n, request.body);
-    return Response.json({ etag: part.etag });
+    part = await env.MEDIA.resumeMultipartUpload(t.key, t.uploadId).uploadPart(n, request.body);
   } catch (err) {
     if (isNoSuchUpload(err)) return fail(410, "This upload was cancelled or expired; start it again.");
     console.error("uploadPart failed", t.key, n, err);
     return fail(502, `Part ${n} didn't make it; retrying should fix it.`);
   }
+  // Charged only once R2 has the bytes. A re-sent part charges again although R2 keeps
+  // just the last copy: over-counting by a retried part is the safe side of a cap.
+  try {
+    await counters(env, t.band).charge(t.ledger, want, torontoDate(Date.now()));
+  } catch (err) {
+    // The part is safe in R2; only the cap undercounts it.
+    console.error("charge failed; bytes uncounted", t.band, t.key, n, want, err);
+  }
+  return Response.json({ etag: part.etag });
 }
 
 async function complete(request: Request, env: Env, t: UploadToken): Promise<Response> {
@@ -182,10 +188,10 @@ async function complete(request: Request, env: Env, t: UploadToken): Promise<Res
     return fail(409, "The upload couldn't be finished; start it again.", { detail: String(err) });
   }
   try {
-    await counters(env, t.band).commit(t.reservation, obj.size, torontoDate(Date.now()));
+    await counters(env, t.band).finish(t.ledger);
   } catch (err) {
-    // The object is safe; only the cap undercounts (the alarm drops the hold in 24 h).
-    console.error("commit failed; bytes uncounted", t.band, t.key, obj.size, err);
+    // The parts' charges stay in flight; the idle alarm commits them within ~3 h.
+    console.error("finish failed; bytes still in flight", t.band, t.key, obj.size, err);
   }
   return Response.json({ key: t.key });
 }
@@ -197,7 +203,7 @@ async function abort(env: Env, t: UploadToken): Promise<Response> {
     // Already aborted, expired or completed: nothing left to cancel.
     if (!isNoSuchUpload(err)) console.error("abort failed", t.key, err);
   }
-  await counters(env, t.band).release(t.reservation);
+  await counters(env, t.band).refund(t.ledger);
   return Response.json({ aborted: true });
 }
 

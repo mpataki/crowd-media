@@ -9,8 +9,8 @@ export type UploadToken = {
   key: string;
   /** R2 multipart upload id. */
   uploadId: string;
-  /** Cap reservation held in the band's BandCounters until complete/abort. */
-  reservation: string;
+  /** This upload's id in the band's BandCounters in-flight ledger (parts charge it). */
+  ledger: string;
   partSize: number;
   parts: number;
   size: number;

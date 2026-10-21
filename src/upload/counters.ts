@@ -1,23 +1,24 @@
 // Per-band byte counters: one SQLite-backed Durable Object per band (idFromName(slug)).
-// Single-threaded, so reserve's check-then-insert is atomic across concurrent inits.
+// Single-threaded, so every check and charge is atomic across concurrent requests.
 //
-// counters      day:<YYYY-MM-DD> → committed bytes (Toronto date, 06:00 rollover).
-//               Rolling 30 d = the day rows from <day-29> to <day>.
-// reservations  bytes held by an upload between init and complete/abort. Both caps
-//               count them. Not upload state: the token alone drives the upload; a row
-//               is only the cap's hold, and the alarm drops it after 24 h.
+// counters  day:<YYYY-MM-DD> → committed bytes (Toronto date, 06:00 rollover).
+//           Rolling 30 d = the day rows from <day-29> to <day>.
+// inflight  bytes an unfinished upload has already sent to R2, charged per part PUT
+//           (the part length is exact). Both caps count them. Init reserves nothing,
+//           so abandoned or squatting inits hold no cap; only bytes that arrived do.
 //
 // The DO is band-agnostic: callers pass limits and days, so it never reads config or
 // derives dates itself (tests drive it with any limits and any day).
 import { DurableObject } from "cloudflare:workers";
 
 const HOUR_MS = 3_600_000;
-export const RESERVATION_TTL_MS = 24 * HOUR_MS;
+/** An upload idle this long since its last charged part stops being in flight. */
+export const INFLIGHT_IDLE_MS = 2 * HOUR_MS;
 const ROLLING_DAYS = 30;
 
 export type Limits = { dayBytes: number; rollingBytes: number };
-export type ReserveResult = { ok: true } | { ok: false; cap: "day" | "rolling" };
-export type Usage = { day: number; rolling: number; reserved: number };
+export type HeadroomResult = { ok: true } | { ok: false; cap: "day" | "rolling" };
+export type Usage = { day: number; rolling: number; inflight: number };
 
 export class BandCounters extends DurableObject<Env> {
   private sql: SqlStorage;
@@ -27,64 +28,80 @@ export class BandCounters extends DurableObject<Env> {
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS counters (window TEXT PRIMARY KEY, bytes INTEGER NOT NULL)`);
     this.sql.exec(
-      `CREATE TABLE IF NOT EXISTS reservations (id TEXT PRIMARY KEY, bytes INTEGER NOT NULL, day TEXT NOT NULL, created_ms INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS inflight (id TEXT NOT NULL, day TEXT NOT NULL, bytes INTEGER NOT NULL, last_ms INTEGER NOT NULL, PRIMARY KEY (id, day))`,
     );
   }
 
-  /** Hold `bytes` against `day` unless that would exceed either cap. Idempotent per id. */
-  async reserve(id: string, bytes: number, day: string, limits: Limits, nowMs: number = Date.now()): Promise<ReserveResult> {
-    if (this.sql.exec(`SELECT 1 FROM reservations WHERE id = ?`, id).toArray().length) return { ok: true };
+  /** Would `size` more bytes on `day` fit under both caps? Read-only: holds nothing. */
+  headroom(day: string, limits: Limits, size: number): HeadroomResult {
     const u = this.usage(day);
-    if (u.day + bytes > limits.dayBytes) return { ok: false, cap: "day" };
-    if (u.rolling + bytes > limits.rollingBytes) return { ok: false, cap: "rolling" };
-    this.sql.exec(`INSERT INTO reservations (id, bytes, day, created_ms) VALUES (?, ?, ?, ?)`, id, bytes, day, nowMs);
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + HOUR_MS);
+    if (u.day + size > limits.dayBytes) return { ok: false, cap: "day" };
+    if (u.rolling + size > limits.rollingBytes) return { ok: false, cap: "rolling" };
     return { ok: true };
   }
 
-  /**
-   * Turn a reservation into counted bytes. `bytes` is what R2 actually stored. Without a
-   * reservation (alarm already dropped it) the bytes still count, against `fallbackDay`.
-   */
-  commit(id: string, bytes: number, fallbackDay: string): void {
-    const held = this.sql.exec<{ day: string }>(`SELECT day FROM reservations WHERE id = ?`, id).toArray()[0];
-    this.sql.exec(`DELETE FROM reservations WHERE id = ?`, id);
+  /** Count `bytes` of upload `id` that just landed in R2, against `day`. */
+  async charge(id: string, bytes: number, day: string, nowMs: number = Date.now()): Promise<void> {
     this.sql.exec(
-      `INSERT INTO counters (window, bytes) VALUES (?, ?) ON CONFLICT(window) DO UPDATE SET bytes = bytes + excluded.bytes`,
-      `day:${held?.day ?? fallbackDay}`,
-      bytes,
-    );
-  }
-
-  release(id: string): void {
-    this.sql.exec(`DELETE FROM reservations WHERE id = ?`, id);
-  }
-
-  /** Bytes counted against `day` and its rolling 30 d, reservations included. */
-  usage(day: string): Usage {
-    const from = `day:${addDays(day, 1 - ROLLING_DAYS)}`;
-    const to = `day:${day}`;
-    const one = (q: string, ...args: string[]) => Number(this.sql.exec(q, ...args).one().n);
-    const committedDay = one(`SELECT COALESCE(SUM(bytes), 0) AS n FROM counters WHERE window = ?`, to);
-    const committedRolling = one(`SELECT COALESCE(SUM(bytes), 0) AS n FROM counters WHERE window >= ? AND window <= ?`, from, to);
-    const heldDay = one(`SELECT COALESCE(SUM(bytes), 0) AS n FROM reservations WHERE day = ?`, day);
-    const heldRolling = one(
-      `SELECT COALESCE(SUM(bytes), 0) AS n FROM reservations WHERE day >= ? AND day <= ?`,
-      from.slice(4),
+      `INSERT INTO inflight (id, day, bytes, last_ms) VALUES (?, ?, ?, ?)
+       ON CONFLICT(id, day) DO UPDATE SET bytes = bytes + excluded.bytes`,
+      id,
       day,
+      bytes,
+      nowMs,
     );
-    return { day: committedDay + heldDay, rolling: committedRolling + heldRolling, reserved: heldRolling };
+    // Idle is per upload, not per day row: a part after 06:00 keeps the earlier row alive.
+    this.sql.exec(`UPDATE inflight SET last_ms = ? WHERE id = ?`, nowMs, id);
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + HOUR_MS);
   }
 
-  /** Hourly: drop reservations older than 24 h and day rows past the rolling window. */
+  /** Upload `id` completed: its charged bytes become committed, on the days they arrived. */
+  finish(id: string): void {
+    this.fold(`id = ?`, id);
+  }
+
+  /** Upload `id` was aborted: R2 discards its parts, so its charges are dropped. */
+  refund(id: string): void {
+    this.sql.exec(`DELETE FROM inflight WHERE id = ?`, id);
+  }
+
+  /** Bytes counted against `day` and its rolling 30 d, in-flight bytes included. */
+  usage(day: string): Usage {
+    const from = addDays(day, 1 - ROLLING_DAYS);
+    const one = (q: string, ...args: string[]) => Number(this.sql.exec(q, ...args).one().n);
+    const committedDay = one(`SELECT COALESCE(SUM(bytes), 0) AS n FROM counters WHERE window = ?`, `day:${day}`);
+    const committedRolling = one(
+      `SELECT COALESCE(SUM(bytes), 0) AS n FROM counters WHERE window >= ? AND window <= ?`,
+      `day:${from}`,
+      `day:${day}`,
+    );
+    const flyingDay = one(`SELECT COALESCE(SUM(bytes), 0) AS n FROM inflight WHERE day = ?`, day);
+    const flyingRolling = one(`SELECT COALESCE(SUM(bytes), 0) AS n FROM inflight WHERE day >= ? AND day <= ?`, from, day);
+    return { day: committedDay + flyingDay, rolling: committedRolling + flyingRolling, inflight: flyingRolling };
+  }
+
+  /** Hourly while uploads are in flight: expire idle ones, prune day rows past the window. */
   async alarm(): Promise<void> {
     const now = Date.now();
-    this.sql.exec(`DELETE FROM reservations WHERE created_ms < ?`, now - RESERVATION_TTL_MS);
+    // An idle upload's bytes are folded into the committed counters, not dropped: they
+    // really are in R2 (as uploaded parts) until the bucket's lifecycle rule aborts the
+    // multipart, and the guest may still complete it. Over-counting is the safe side.
+    this.fold(`id IN (SELECT id FROM inflight GROUP BY id HAVING MAX(last_ms) < ?)`, now - INFLIGHT_IDLE_MS);
     // Keep a day of slack past the window for the Toronto-vs-UTC date edge.
     const oldest = addDays(new Date(now).toISOString().slice(0, 10), -ROLLING_DAYS);
     this.sql.exec(`DELETE FROM counters WHERE window < ?`, `day:${oldest}`);
-    const left = this.sql.exec(`SELECT COUNT(*) AS n FROM reservations`).one().n;
+    const left = this.sql.exec(`SELECT COUNT(*) AS n FROM inflight`).one().n;
     if (Number(left) > 0) await this.ctx.storage.setAlarm(now + HOUR_MS);
+  }
+
+  /** Move the in-flight rows matching `where` into the committed day counters. */
+  private fold(where: string, arg: string | number): void {
+    this.sql.exec(
+      `INSERT INTO counters (window, bytes) SELECT 'day:' || day, SUM(bytes) FROM inflight WHERE ${where} GROUP BY day
+       ON CONFLICT(window) DO UPDATE SET bytes = bytes + excluded.bytes`,
+      arg,
+    );
+    this.sql.exec(`DELETE FROM inflight WHERE ${where}`, arg);
   }
 }
 

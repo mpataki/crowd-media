@@ -24,13 +24,14 @@ it routes `/api/*` itself and hands static paths to `ASSETS`.
 - `src/api/uploads.ts` — chunked upload API (`POST /api/uploads`, `PUT …/:id/parts/:n`,
   `POST …/:id/complete`, `DELETE …/:id`) streaming into R2 multipart, 32 MiB parts.
   Init checks the Turnstile token (`src/upload/turnstile.ts`, siteverify with an
-  injected fetch) after the paused check and rate limit, before validation and any
-  reservation; no `TURNSTILE_SECRET` → 503. `src/upload/`: `validate.ts` (init body,
+  injected fetch) after the paused check and rate limit, before validation and the cap
+  headroom check; no `TURNSTILE_SECRET` → 503. `src/upload/`: `validate.ts` (init body,
   type/ext allow-list, size cap), `keys.ts`
   (key protocol `<prefix>/<capture>__<credit>__<uuid8>.<ext>`), `token.ts` (the upload
   `id`: HMAC-signed, carries key/uploadId/sizes, so no per-upload state exists outside
   R2's multipart), `counters.ts` (`BandCounters`, SQLite DO per band: day and rolling-30-d
-  byte caps, reservations released by an hourly alarm after 24 h).
+  byte caps; init only checks headroom, each part PUT charges its bytes to an in-flight
+  ledger, complete commits them, abort refunds them, an upload idle 2 h is committed by the alarm).
 - `src/config/` — pure helpers: `resolveBand` (Host listed by a band → that band;
   any unclaimed host → first path segment, stripped: `/shivs/api/band`), `pickShow`,
   `torontoDate` (06:00 rollover), `objectPrefix`, `themeFor`.

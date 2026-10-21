@@ -48,7 +48,7 @@ it("objectKey splits back into its fields on __", () => {
 
 describe("upload token", () => {
   const secret = `k-${crypto.randomUUID()}`;
-  const t: UploadToken = { band: "foolhearts", key: "foolhearts/x/y.mp4", uploadId: "u1", reservation: "r1", partSize: 33554432, parts: 3, size: 73400320 };
+  const t: UploadToken = { band: "foolhearts", key: "foolhearts/x/y.mp4", uploadId: "u1", ledger: "r1", partSize: 33554432, parts: 3, size: 73400320 };
 
   it("round-trips with the same secret, URL-safe", async () => {
     const tok = await signToken(t, secret);

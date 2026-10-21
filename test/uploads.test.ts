@@ -6,6 +6,13 @@ import { direct, freshBand, http, media, SHOW_NIGHT } from "./upload-helpers";
 import type { Init } from "./upload-helpers";
 import { DUMMY_TOKEN } from "./fakes/siteverify";
 
+/** Committed bytes on `day`, as one finished upload would leave them. */
+async function seed(c: ReturnType<typeof direct>["counters"], bytes: number, day: string) {
+  const u = crypto.randomUUID();
+  await c.charge(u, bytes, day);
+  await c.finish(u);
+}
+
 const KEY_TAIL = /^(\d{8}T\d{6}|unknown)__([a-z0-9-]+)__([0-9a-f]{8})\.([a-z0-9]+)$/;
 
 async function initOk(body: Record<string, unknown>): Promise<Init> {
@@ -117,12 +124,36 @@ describe("init refusals", () => {
   it("day counter at day_gb − 1 MiB, 10 MiB init → 429 daily cap, nothing created in R2", async () => {
     const band = freshBand();
     const d = direct(band);
-    await d.counters.commit("seed", band.caps.dayGb * GiB - MiB, torontoDate(Date.now()));
+    await seed(d.counters, band.caps.dayGb * GiB - MiB, torontoDate(Date.now()));
     const res = await d.init(media({ size: 10 * MiB }));
     expect(res.status).toBe(429);
     expect((await res.json<{ reason: string }>()).reason).toMatch(/daily cap/i);
     expect(d.r2Calls).toEqual([]);
-    expect((await d.counters.usage(torontoDate(Date.now()))).reserved).toBe(0);
+    expect((await d.counters.usage(torontoDate(Date.now()))).inflight).toBe(0);
+  });
+
+  it("10 inits of 2 GiB with no parts sent hold no cap: a 5 MiB upload still succeeds", async () => {
+    const band = freshBand();
+    const d = direct(band);
+    const day = torontoDate(Date.now());
+    const squatters: Init[] = [];
+    for (let i = 0; i < 10; i++) {
+      const res = await d.init(media({ size: 2048 * MiB }));
+      expect(res.status).toBe(201);
+      squatters.push(await res.json<Init>());
+    }
+    expect(await d.counters.usage(day)).toEqual({ day: 0, rolling: 0, inflight: 0 });
+
+    const res = await d.init(media({ size: 5 * MiB }));
+    expect(res.status, await res.clone().text()).toBe(201);
+    const init = await res.json<Init>();
+    const put = await d.part(init.id, 1, new Uint8Array(5 * MiB));
+    expect(put.status).toBe(200);
+    expect((await d.counters.usage(day)).inflight).toBe(5 * MiB);
+    const { etag } = await put.json<{ etag: string }>();
+    expect((await d.complete(init.id, [{ n: 1, etag }])).status).toBe(200);
+    expect(await d.counters.usage(day)).toEqual({ day: 5 * MiB, rolling: 5 * MiB, inflight: 0 });
+    for (const s of squatters) await d.abort(s.id);
   });
 
   it("rolling 30 d at month_gb (spread over past days) → 429 monthly cap", async () => {
@@ -131,7 +162,7 @@ describe("init refusals", () => {
     const today = torontoDate(Date.now());
     const [y, m, dd] = today.split("-").map(Number);
     const daysAgo = (n: number) => new Date(Date.UTC(y, m - 1, dd - n)).toISOString().slice(0, 10);
-    for (let i = 1; i <= 10; i++) await d.counters.commit(`s${i}`, (band.caps.monthGb * GiB) / 10, daysAgo(i));
+    for (let i = 1; i <= 10; i++) await seed(d.counters, (band.caps.monthGb * GiB) / 10, daysAgo(i));
     const res = await d.init(media({ size: MiB }));
     expect(res.status).toBe(429);
     expect((await res.json<{ reason: string }>()).reason).toMatch(/monthly cap/i);
